@@ -9,9 +9,9 @@
 
 **舒心家政服务平台** —— 覆盖用户端、家政人员端、后台管理端的家政服务平台,前后端分离:
 
-- **前端**:React 18 + TypeScript + Vite 5 + Tailwind CSS 3,React Router v6 角色路由守卫
-- **后端**:FastAPI (Python 3.12) + MySQL 8.0,JWT 认证,角色 + 资源归属双重校验,订单状态机,财务流水,连接池
-- **测试**:pytest e2e 26 项(独立测试库,含安全断言);`npm run build` 0 错误
+- **前端**:React 18 + TypeScript + Vite 5 + Tailwind CSS 3,React Router v6 角色路由守卫;生产构建关闭 Mock 自动降级
+- **后端**:FastAPI (Python 3.12) + MySQL 8.0,JWT 认证,Argon2id 密码哈希,角色 + 资源归属双重校验,订单状态机,财务流水(唯一键幂等),连接池,Service 分层,数据库迁移脚本,安全响应头
+- **测试**:pytest 59 项(26 基线 e2e + 单元测试 + 安全/幂等用例;独立测试库);`npm run build` 0 错误
 
 ### 三大角色
 
@@ -85,13 +85,17 @@ npm run dev
 ├── README.md             # 项目总览与修改记录
 ├── .env.example          # 环境变量模板(复制为 .env 使用)
 ├── .gitignore
+├── pytest.ini            # pytest 配置(testpaths=backend)
 ├── package.json          # 前端依赖与脚本
 ├── src/                  # 前端 (React)
 ├── backend/
 │   ├── requirements.txt  # 后端依赖(版本固定)
-│   ├── schema.sql        # 建表脚本
-│   ├── e2e_test.py       # pytest e2e(26 项,独立测试库)
-│   └── app/              # FastAPI 应用(routers / auth / database …)
+│   ├── schema.sql        # 建表脚本(全量最新结构,全新部署用)
+│   ├── migrations/       # 增量迁移脚本(存量库升级用)
+│   ├── scripts/migrate.py    # 迁移执行器(幂等)
+│   ├── e2e_test.py       # 26 项基线 e2e(独立测试库)
+│   ├── tests/            # 单元测试 + v4.0 安全/幂等用例
+│   └── app/              # FastAPI 应用(routers / services / auth / database …)
 └── docs/
     ├── 手册/              # 启动说明、配置说明、测试文档、测试账号
     ├── 架构/              # 后端架构详解

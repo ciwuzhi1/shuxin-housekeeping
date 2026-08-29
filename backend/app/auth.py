@@ -1,14 +1,19 @@
 """JWT 认证 + 密码校验。
 
 对应 Node 版 auth.ts。
-- 密码方案（简单档）：固定盐 + SHA-256，登录时哈希比对（见 docs/现状/数据库接入分析.md 方案 B）
+- 密码方案（V4.0 升级）：Argon2id 哈希（argon2-cffi）；
+  存量用户的旧格式（固定盐 + SHA-256 十六进制）在校验时仍兼容，
+  并在登录成功后由路由层自动升级为 Argon2id（见 routers/auth.py）
 - 提供 require_auth / require_role 依赖，替代 Express 中间件
 """
 
 import hashlib
+import logging
 import time
 
 import jwt
+from argon2 import PasswordHasher
+from argon2.exceptions import InvalidHashError, VerifyMismatchError
 from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
@@ -17,14 +22,35 @@ from .errors import ForbiddenError, UnauthorizedError
 
 _bearer = HTTPBearer(auto_error=False)
 
+# 模块级单例：argon2-cffi 默认参数即 Argon2id
+_hasher = PasswordHasher()
+
+_ARGON2_PREFIX = "$argon2"
+
+logger = logging.getLogger(__name__)
+
 
 def hash_password(password: str) -> str:
-    """SHA-256(password)，加固定盐。"""
-    return hashlib.sha256((settings.PASSWORD_SALT + password).encode("utf-8")).hexdigest()
+    """Argon2id 哈希（每次生成随机盐，编码串含全部校验参数）。"""
+    return _hasher.hash(password)
+
+
+def is_legacy_hash(hashed: str | None) -> bool:
+    """判断是否旧格式哈希（固定盐 + SHA-256 的 64 位十六进制，非 $argon2 前缀）。"""
+    return not (hashed or "").startswith(_ARGON2_PREFIX)
 
 
 def verify_password(password: str, hashed: str) -> bool:
-    return hash_password(password) == hashed
+    """按前缀分流校验：$argon2 开头走 Argon2id，否则走旧版固定盐 SHA-256。"""
+    if not hashed:
+        return False
+    if hashed.startswith(_ARGON2_PREFIX):
+        try:
+            return _hasher.verify(hashed, password)
+        except (VerifyMismatchError, InvalidHashError):
+            return False
+    # 旧格式兼容：sha256(PASSWORD_SALT + password).hexdigest()
+    return hashlib.sha256((settings.PASSWORD_SALT + password).encode("utf-8")).hexdigest() == hashed
 
 
 def sign_token(payload: dict) -> str:

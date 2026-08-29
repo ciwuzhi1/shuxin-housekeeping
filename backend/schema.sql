@@ -99,7 +99,8 @@ CREATE TABLE reviews (
   images JSON,
   service_name VARCHAR(100),
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT fk_review_order FOREIGN KEY (order_id) REFERENCES orders(id)
+  CONSTRAINT fk_review_order FOREIGN KEY (order_id) REFERENCES orders(id),
+  UNIQUE KEY uk_review_order (order_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE transactions (
@@ -111,7 +112,8 @@ CREATE TABLE transactions (
   status VARCHAR(20),
   description TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT fk_tx_order FOREIGN KEY (order_id) REFERENCES orders(id)
+  CONSTRAINT fk_tx_order FOREIGN KEY (order_id) REFERENCES orders(id),
+  UNIQUE KEY uk_tx_order_type (order_id, type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE notifications (

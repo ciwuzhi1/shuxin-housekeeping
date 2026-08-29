@@ -44,6 +44,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (err?.status === 401) {
           clearToken();
         }
+        // 生产环境按未登录处理（不留本地会话），开发环境保留以便演示恢复
+        if (import.meta.env.PROD) {
+          clearToken();
+        }
         setBackendAvailable(false);
       });
   }, []);
@@ -63,11 +67,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (err: any) {
       // 仅当后端返回明确的鉴权/校验失败（401 密码错 / 422 缺密码）时
       // 视为"真实登录失败"，抛出让页面展示具体错误信息。
-      // 其余情况（网络错误 status=0、Vite 代理 500 等）视为后端不可用，
-      // 降级 Mock（演示/离线可用，不代表真实鉴权）。
+      // 其余情况（网络错误 status=0、Vite 代理 500 等）视为后端不可用；
+      // 生产环境一律如实失败（不再降级本地 Mock 账号校验），仅开发环境降级。
       const authFailed = err?.status === 401 || err?.status === 422;
       if (authFailed) {
         setBackendAvailable(true);
+        setLoading(false);
+        throw err;
+      }
+      if (import.meta.env.PROD) {
+        setBackendAvailable(false);
         setLoading(false);
         throw err;
       }

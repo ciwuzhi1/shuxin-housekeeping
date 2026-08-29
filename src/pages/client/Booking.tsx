@@ -99,11 +99,14 @@ export default function ClientBooking() {
         providerName: selectedProvider ? (selectedProv?.name || selectedProvider) : undefined,
       };
 
-      // 优先调用 API，API 不可用时模拟成功（mock 模式）
+      // 优先调用 API；生产环境失败一律如实报错，仅开发环境模拟成功（mock 模式）
       try {
         await orderApi.create(orderData);
       } catch (apiErr: any) {
-        // API 不可用（网络错误/未登录）时走 mock 降级
+        if (import.meta.env.PROD) {
+          throw apiErr; // 生产环境不伪装预约成功
+        }
+        // 开发环境：API 不可用（网络错误/未登录）时走 mock 降级
         if (apiErr.code === 'NO_TOKEN' || apiErr.status === 0) {
           console.warn('API 不可用，使用 Mock 模拟预约');
         } else {

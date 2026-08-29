@@ -1,6 +1,6 @@
 """MySQL 种子数据（从 Node 版 seed-data.ts 移植）。
 
-密码使用 SHA-256 + 固定盐哈希（见 auth.hash_password）。
+密码使用 Argon2id 哈希（经 auth.hash_password，v4.0 起替代 SHA-256+固定盐）。
 JSON 列（service_area/skills/review_images/images）以 json.dumps 写入。
 """
 

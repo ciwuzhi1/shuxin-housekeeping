@@ -44,6 +44,17 @@ def get_conn():
     return _pool.connection()
 
 
+def close_pool() -> None:
+    """关闭并清空连接池（测试重建数据库后调用，避免复用指向旧库的缓存连接）。"""
+    global _pool
+    if _pool is not None:
+        try:
+            _pool.close()
+        except Exception:
+            pass
+    _pool = None
+
+
 def _camel(key: str) -> str:
     return re.sub(r"_([a-z])", lambda m: m.group(1).upper(), key)
 

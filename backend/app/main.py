@@ -3,7 +3,9 @@
 启动: uvicorn backend.app.main:app --port 3001
 """
 
+import logging
 import time
+import uuid
 from collections import defaultdict
 from contextlib import asynccontextmanager
 
@@ -57,6 +59,42 @@ async def rate_limit(request: Request, call_next):
             )
         _requests[client].append(now)
     return await call_next(request)
+
+
+# 安全响应头（V4.0 第 10 节）：包住包括 429 在内的所有响应
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
+
+
+# 轻量访问日志（V4.0 第 20 节）：request_id/method/path/status/latency；
+# 只记录 path，不记录 querystring、token 与任何请求体，避免敏感信息进日志。
+# 自建 logger（不挂在 uvicorn.access 上，避免其 AccessFormatter 按位置拆参数拼错行）。
+_access_logger = logging.getLogger("shuxin.access")
+if not _access_logger.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(logging.Formatter("[req] %(message)s"))
+    _access_logger.addHandler(_handler)
+_access_logger.setLevel(logging.INFO)
+_access_logger.propagate = False
+
+
+@app.middleware("http")
+async def access_log(request: Request, call_next):
+    request_id = uuid.uuid4().hex[:8]
+    start = time.perf_counter()
+    try:
+        response = await call_next(request)
+        status = response.status_code
+    except Exception:
+        _access_logger.info("%s %s %s 500 %.1fms", request_id, request.method, request.url.path, (time.perf_counter() - start) * 1000)
+        raise
+    _access_logger.info("%s %s %s %s %.1fms", request_id, request.method, request.url.path, status, (time.perf_counter() - start) * 1000)
+    return response
 
 
 @app.get("/api/health")

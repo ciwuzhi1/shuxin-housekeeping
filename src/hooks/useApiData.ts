@@ -50,9 +50,12 @@ export function useApiData<T>(
       })
       .catch((err: any) => {
         if (!cancelledRef.current) {
-          // API 不可用时静默使用 fallback（mock 数据）
           const msg = err?.message || err?.toString?.() || '未知错误';
-          if (err?.code !== 'NETWORK_ERROR') {
+          if (import.meta.env.PROD) {
+            // 生产环境：API 失败如实进入错误态（error 必定非空），不静默降级 Mock
+            setError(msg);
+          } else if (err?.code !== 'NETWORK_ERROR') {
+            // 开发环境：API 不可用时静默使用 fallback（mock 数据）
             setError(msg);
           }
           setApiMode(false);

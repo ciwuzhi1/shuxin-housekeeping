@@ -1,16 +1,20 @@
 """认证路由：登录 / 注册。
 
-修复：登录现在必须携带密码并做 SHA-256 比对（见 app/auth.py）。
+- 登录携带密码并校验（Argon2id，兼容旧版固定盐 SHA-256，见 app/auth.py）
+- 旧格式哈希用户登录成功后自动升级为 Argon2id（升级失败不阻断登录）
 """
 
+import logging
 import time
 
 from fastapi import APIRouter, Depends
 
-from ..auth import hash_password, require_auth, sign_token, verify_password
+from ..auth import hash_password, is_legacy_hash, require_auth, sign_token, verify_password
 from ..database import execute, row
 from ..errors import BadRequestError, ConflictError, UnauthorizedError
 from ..schemas import LoginIn, RegisterIn
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -34,6 +38,13 @@ def login(data: LoginIn):
     hashed = (stored or {}).get("password")
     if not hashed or not verify_password(data.password, hashed):
         raise UnauthorizedError("密码错误", "INVALID_PASSWORD")
+
+    # 旧格式哈希（SHA-256+固定盐）登录成功后自动升级为 Argon2id；失败不阻断登录
+    if is_legacy_hash(hashed):
+        try:
+            execute("UPDATE users SET password = %s WHERE id = %s", [hash_password(data.password), user["id"]])
+        except Exception:
+            logger.exception("LEGACY_HASH_UPGRADE_FAILED user_id=%s", user["id"])
 
     token = sign_token({"userId": user["id"], "username": user["username"], "role": data.role})
     return {"success": True, "data": {**user, "token": token}, "message": "登录成功"}
