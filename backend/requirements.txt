@@ -1,0 +1,28 @@
+# 舒心家政服务平台 · 后端依赖（Python 3.12）
+# 安装：backend/.venv/Scripts/python.exe -m pip install -r backend/requirements.txt
+# 版本与 backend/.venv 实测环境一致（2026-08-29）。
+
+# Web 框架
+fastapi==0.141.1
+# ASGI 服务器（standard 附带 websockets/watchfiles 等加速组件）
+uvicorn[standard]==0.52.1
+
+# MySQL 驱动（纯 Python 实现）
+PyMySQL==1.2.0
+# PyMySQL 认证所需的加密支持（caching_sha2_password 等）
+cryptography==50.0.0
+# 数据库连接池
+DBUtils==3.1.2
+
+# 认证
+# JWT 签发与校验（HS256）
+PyJWT==2.13.0
+
+# 配置
+# 可选加载根目录 .env 环境变量文件
+python-dotenv==1.2.2
+
+# 测试
+pytest==9.1.1
+# e2e 测试的 HTTP 客户端
+httpx==0.28.1

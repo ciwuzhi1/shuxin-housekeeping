@@ -1,0 +1,28 @@
+# ===== 依赖与构建产物 =====
+node_modules/
+dist/
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+backend/.venv/
+.pytest_cache/
+pytest-cache-files-*/
+
+# ===== 日志与本地运行产物 =====
+*.log
+tsconfig.tsbuildinfo
+
+# ===== 环境变量与密钥（只提交 .env.example）=====
+.env
+.env.local
+.env.*.local
+
+# ===== 编辑器 / 系统文件 =====
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# ===== 本地工具配置 =====
+.claude/settings.local.json
