@@ -7,9 +7,10 @@
 - 评价双写 reviews 表并重算家政员评分；rating=0 条件更新 + 唯一键防并发重复评价
 """
 
-import pymysql
 import random
 import time
+
+import pymysql
 
 from ..database import execute, parse_pagination, row, rows, transaction
 from ..errors import BadRequestError, ConflictError, ForbiddenError, NotFoundError
@@ -155,7 +156,8 @@ def create_order(data: OrderCreate, user: dict) -> dict:
         assigned_provider_name = data.provider_name or provider["name"]
 
     oid = _new_id("o")
-    order_no = f"HK{data.scheduled_date.replace('-', '')}{random.randint(0, 999):03d}"
+    # 6 位随机数：同日期订单较多时 3 位随机会碰撞（order_no 唯一键），曾致测试偶发失败
+    order_no = f"HK{data.scheduled_date.replace('-', '')}{random.randint(0, 999999):06d}"
     now = _now()
 
     def _do(conn):

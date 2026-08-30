@@ -157,7 +157,6 @@ def test_order_flow_happy_path(client):
     # 下单
     order = _create_order(client, c1["token"])
     order_id = order["id"]
-    order_no = order["orderNo"]
 
     # 归属校验：不能替他人下单
     r = client.post(
@@ -297,7 +296,7 @@ def test_review_persists_to_reviews_table(client):
 # ======================== C. 越权防护 ========================
 
 def test_idor_client_read_other_client_orders(client):
-    c1 = login(client, "zhangsan", "client")
+    login(client, "zhangsan", "client")
     c2 = login(client, "lisi", "client")
     r = client.get("/api/client/c1/orders", headers=auth(c2["token"]))
     assert r.status_code == 403, f"越权读取应被拒: {r.status_code}"

@@ -28,3 +28,11 @@ python-dotenv==1.2.2
 pytest==9.1.1
 # e2e 测试的 HTTP 客户端
 httpx==0.28.1
+# 覆盖率报告（CI 门禁 --cov-fail-under）
+pytest-cov==7.1.0
+
+# 质量门禁（CI 执行，本地可用）
+# lint：pyflakes/pycodestyle 错误类 + 导入排序（规则集见 pyproject.toml）
+ruff==0.16.5
+# Python 依赖漏洞审计（对照 requirements.txt 固定版本）
+pip-audit==2.10.1

@@ -1,0 +1,68 @@
+name: CI
+
+# V4.2 工程化：push / PR 自动执行后端 lint + 依赖审计 + 测试（含覆盖率门禁）与前端构建
+# 后端测试使用独立测试库 housekeeping_test（测试代码自动建删），不污染 housekeeping 库
+
+on: [push, pull_request]
+
+jobs:
+  backend:
+    name: 后端 lint / 审计 / 测试
+    runs-on: ubuntu-latest
+    services:
+      # 测试代码硬编码连接 root:root@127.0.0.1:3306，容器凭据与其对齐即可
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: housekeeping
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Lint（ruff）
+        run: ruff check backend
+
+      - name: 依赖漏洞审计（pip-audit，环境扫描）
+        run: pip-audit
+
+      - name: 测试（pytest，覆盖率门禁 83%）
+        run: pytest backend -q --cov=backend/app --cov-fail-under=83
+
+  frontend:
+    name: 前端构建
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 构建（tsc + vite）
+        run: npm run build
+
+      # 首轮观察不阻断；确认无噪音后移除 continue-on-error 转为硬门禁
+      - name: 依赖漏洞审计（npm audit）
+        run: npm audit --audit-level=high
+        continue-on-error: true

@@ -1,0 +1,23 @@
+[tool.ruff]
+# 舒心家政 · 后端 lint 配置（V4.2 工程化批次）
+# 原则：先收紧"真问题"类规则（错误/未用代码/导入），风格类规则后续按需扩充。
+line-length = 120
+target-version = "py312"
+extend-exclude = ["backend/.venv"]
+
+[tool.ruff.lint]
+select = [
+    "E4",   # pycodestyle 错误（缩进/空白类）
+    "E7",   # 语句错误
+    "E9",   # 运行时/语法错误
+    "F",    # pyflakes（未用导入/变量、未定义名）
+    "I",    # isort 导入排序
+]
+
+[tool.ruff.lint.per-file-ignores]
+# e2e_test.py 有意把 import 放在 os.environ 设置之后（环境变量须先于应用导入生效）
+"backend/e2e_test.py" = ["E402"]
+
+[tool.coverage.run]
+source = ["backend/app"]
+omit = ["backend/app/__init__.py", "backend/app/routers/__init__.py", "backend/app/services/__init__.py"]
