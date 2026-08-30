@@ -1,4 +1,4 @@
-"""后台管理路由：统计 / 用户列表。
+"""后台管理路由：统计 / 用户列表 / 平台设置。
 
 修复 P1-3：orderTrend / userGrowth / averageRating 由静态数据改为真实聚合。
 """
@@ -8,7 +8,8 @@ import time
 from fastapi import APIRouter, Depends, Query
 
 from ..auth import require_role
-from ..database import row, rows
+from ..database import execute, row, rows
+from ..errors import BadRequestError
 
 router = APIRouter()
 
@@ -92,3 +93,25 @@ def list_users(
         params += [f"%{search}%", f"%{search}%", f"%{search}%"]
     sql += " ORDER BY created_at DESC"
     return {"success": True, "data": rows(sql, params)}
+
+
+@router.get("/settings")
+def get_settings(_user=Depends(require_role("admin"))):
+    """平台设置（key-value），系统设置页真实读写。"""
+    kv = rows("SELECT `key`, value FROM settings")
+    return {"success": True, "data": {k["key"]: k["value"] for k in kv}}
+
+
+@router.put("/settings")
+def save_settings(data: dict, _user=Depends(require_role("admin"))):
+    """全量保存平台设置；key 必须已存在（防止写入任意键）。"""
+    if not isinstance(data, dict) or not data:
+        raise BadRequestError("设置内容不能为空")
+    existing = {k["key"] for k in rows("SELECT `key` FROM settings")}
+    unknown = [k for k in data if k not in existing]
+    if unknown:
+        raise BadRequestError(f"不支持的设置项: {', '.join(unknown)}")
+    for k, v in data.items():
+        execute("UPDATE settings SET value = %s WHERE `key` = %s", [str(v).lower() if isinstance(v, bool) else str(v), k])
+    kv = rows("SELECT `key`, value FROM settings")
+    return {"success": True, "data": {k["key"]: k["value"] for k in kv}, "message": "设置已保存"}

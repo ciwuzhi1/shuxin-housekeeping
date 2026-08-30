@@ -5,12 +5,16 @@ import { useApiData } from '../../hooks/useApiData';
 import type { ServiceProvider } from '../../types';
 import { Award, CheckCircle, Clock, AlertCircle, Upload, FileText, ShieldCheck } from 'lucide-react';
 
+// 页面材料类型 → 后端 doc_type
+const DOC_TYPE_MAP: Record<string, string> = { idcard: 'idcard_front', health: 'health_cert', skill: 'skill_cert' };
+
 export default function ProviderCertification() {
   const { user } = useAuth();
   const provider = user as ServiceProvider;
   const [showUpload, setShowUpload] = useState(false);
   const [uploadType, setUploadType] = useState('');
-  const [uploadedFiles, setUploadedFiles] = useState<Record<string, string>>({});
+  const [uploading, setUploading] = useState(false);
+  const [uploadMsg, setUploadMsg] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 修复：认证状态以真实接口为准（此前读登录快照，管理员审核通过后页面不刷新）
@@ -21,6 +25,15 @@ export default function ProviderCertification() {
   );
   const liveMe = (liveProviders as any[]).find((p: any) => p.id === provider?.id);
   const effectiveProvider = (liveMe || provider) as ServiceProvider;
+
+  // 已上传材料（真实列表：certification_files 表）
+  const certs = useApiData(
+    () => (provider?.id ? providerApi.getCertifications(provider.id) : Promise.resolve([] as any)),
+    [] as any,
+    [provider?.id]
+  );
+  const certFiles: any[] = (certs.data as any[]) || [];
+  const hasDoc = (docType: string) => certFiles.some(f => f.docType === docType);
 
   const certStatus = effectiveProvider?.certificationStatus || 'unsubmitted';
 
@@ -34,23 +47,48 @@ export default function ProviderCertification() {
   const config = statusConfig[certStatus] || statusConfig.unsubmitted;
 
   const certItems = [
-    { title: '身份证信息', desc: '需要上传身份证正反面照片', uploaded: !!uploadedFiles.idcard || !!effectiveProvider?.idCardFront, type: 'idcard' },
-    { title: '健康证明', desc: '有效期内健康证或体检报告', uploaded: !!uploadedFiles.health || !!effectiveProvider?.healthCert, type: 'health' },
-    { title: '技能证书', desc: '家政服务相关职业技能证书', uploaded: !!uploadedFiles.skill || !!effectiveProvider?.skillCert, type: 'skill' },
+    { title: '身份证信息', desc: '需要上传身份证正面照片', uploaded: hasDoc('idcard_front') || hasDoc('idcard_back'), type: 'idcard' },
+    { title: '健康证明', desc: '有效期内健康证或体检报告', uploaded: hasDoc('health_cert'), type: 'health' },
+    { title: '技能证书', desc: '家政服务相关职业技能证书', uploaded: hasDoc('skill_cert'), type: 'skill' },
   ];
 
   const handleUploadClick = (type: string) => {
     setUploadType(type);
+    setUploadMsg('');
     setShowUpload(true);
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    // 模拟上传过程
-    setUploadedFiles(prev => ({ ...prev, [uploadType]: file.name }));
-    setShowUpload(false);
-    alert(`"${file.name}" 上传成功！等待管理员审核。`);
+    if (file.size > 5 * 1024 * 1024) {
+      setUploadMsg('❌ 文件超过 5MB 上限');
+      return;
+    }
+    setUploading(true);
+    setUploadMsg('');
+    try {
+      // 真实上传：base64 → 后端落盘 + certification_files 落库
+      const dataBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
+        reader.onerror = () => reject(new Error('读取文件失败'));
+        reader.readAsDataURL(file);
+      });
+      await providerApi.uploadCertification(provider.id, {
+        docType: DOC_TYPE_MAP[uploadType] || uploadType,
+        filename: file.name,
+        dataBase64,
+      });
+      setShowUpload(false);
+      certs.reload();
+      alert(`"${file.name}" 上传成功！材料已提交，等待管理员审核。`);
+    } catch (e: any) {
+      setUploadMsg('❌ 上传失败：' + (e?.message || '请重试'));
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
   const handleDropZoneClick = () => {
@@ -134,12 +172,13 @@ export default function ProviderCertification() {
             <input ref={fileInputRef} type="file" accept=".jpg,.jpeg,.png,.pdf" className="hidden" onChange={handleFileSelect} />
             <div onClick={handleDropZoneClick} className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-blue-400 transition-colors cursor-pointer mb-4">
               <Upload className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-              <p className="text-gray-600 font-medium">点击选择文件</p>
-              <p className="text-sm text-gray-400 mt-1">支持 JPG、PNG、PDF 格式，文件不超过10MB</p>
+              <p className="text-gray-600 font-medium">{uploading ? '上传中...' : '点击选择文件'}</p>
+              <p className="text-sm text-gray-400 mt-1">支持 JPG、PNG、PDF 格式，文件不超过5MB</p>
+              {uploadMsg && <p className={'text-sm mt-2 ' + (uploadMsg.startsWith('❌') ? 'text-red-600' : 'text-gray-600')}>{uploadMsg}</p>}
             </div>
             <div className="flex gap-3">
-              <button onClick={() => setShowUpload(false)} className="btn-secondary flex-1">取消</button>
-              <button onClick={handleDropZoneClick} className="btn-primary flex-1">选择文件</button>
+              <button onClick={() => setShowUpload(false)} className="btn-secondary flex-1" disabled={uploading}>取消</button>
+              <button onClick={handleDropZoneClick} className="btn-primary flex-1" disabled={uploading}>选择文件</button>
             </div>
           </div>
         </div>

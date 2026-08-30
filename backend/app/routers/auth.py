@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends
 from ..auth import hash_password, is_legacy_hash, require_auth, sign_token, verify_password
 from ..database import execute, row
 from ..errors import BadRequestError, ConflictError, UnauthorizedError
-from ..schemas import LoginIn, RegisterIn
+from ..schemas import LoginIn, PasswordChangeIn, RegisterIn
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +58,20 @@ def me(user: dict = Depends(require_auth)):
     if not me_user:
         raise UnauthorizedError("登录状态已失效，请重新登录", "USER_NOT_FOUND")
     return {"success": True, "data": me_user, "message": "ok"}
+
+
+@router.put("/password")
+def change_password(data: PasswordChangeIn, user: dict = Depends(require_auth)):
+    """修改本人密码：校验旧密码，Argon2id 重算落库。"""
+    uid = user.get("userId")
+    stored = row("SELECT password FROM users WHERE id = %s", [uid])
+    hashed = (stored or {}).get("password")
+    if not hashed or not verify_password(data.old_password, hashed):
+        raise BadRequestError("原密码错误", "WRONG_OLD_PASSWORD")
+    if data.old_password == data.new_password:
+        raise BadRequestError("新密码不能与原密码相同")
+    execute("UPDATE users SET password = %s WHERE id = %s", [hash_password(data.new_password), uid])
+    return {"success": True, "message": "密码已修改"}
 
 
 @router.post("/register")

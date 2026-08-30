@@ -491,3 +491,193 @@ def test_grab_pool_order_detail_visible(client):
     p1 = login(client, "liujie", "provider")
     r = client.get(f"/api/orders/{oid}", headers=auth(p1["token"]))
     assert r.status_code == 200, f"抢单池订单详情应可看: {r.status_code} {r.text[:120]}"
+
+
+# ======================== G. v3.7 新能力回归（设置/通知/提现/资质/趋势/改密） ========================
+
+def test_admin_settings_roundtrip(client):
+    """系统设置：admin 可读写；未知键被拒；client 403。"""
+    admin = login(client, "admin", "admin", password="admin123")
+    r = client.get("/api/admin/settings", headers=auth(admin["token"]))
+    assert r.status_code == 200
+    assert r.json()["data"]["platform_name"], "应包含默认平台名称"
+
+    r = client.put("/api/admin/settings", headers=auth(admin["token"]), json={"platform_name": "舒心家政", "service_radius": "12"})
+    assert r.status_code == 200 and r.json()["data"]["service_radius"] == "12"
+
+    r = client.put("/api/admin/settings", headers=auth(admin["token"]), json={"evil_key": "x"})
+    assert r.status_code == 400, "未知设置键应被拒绝"
+
+    c1 = login(client, "zhangsan", "client")
+    r = client.get("/api/admin/settings", headers=auth(c1["token"]))
+    assert r.status_code == 403, "非 admin 不可读写设置"
+
+
+def test_admin_send_notification(client):
+    """管理员发送通知真实落库，接收方可读；provider 发送被拒。"""
+    admin = login(client, "admin", "admin", password="admin123")
+    c1 = login(client, "zhangsan", "client")
+    p1 = login(client, "liujie", "provider")
+
+    r = client.post("/api/notifications", headers=auth(admin["token"]),
+                    json={"userId": "c1", "title": "测试通知", "content": "e2e 发送", "type": "system"})
+    assert r.status_code == 200
+
+    r = client.get("/api/notifications", headers=auth(c1["token"]))
+    assert any(n["title"] == "测试通知" for n in r.json()["data"]), "接收方应看到通知"
+
+    r = client.post("/api/notifications", headers=auth(p1["token"]),
+                    json={"userId": "c1", "title": "x", "content": "y"})
+    assert r.status_code == 403, "非 admin 不可发送通知"
+
+    r = client.post("/api/notifications", headers=auth(admin["token"]),
+                    json={"userId": "nope", "title": "x", "content": "y"})
+    assert r.status_code == 404, "目标用户不存在应 404"
+
+
+def test_withdrawal_full_flow(client):
+    """提现闭环：申请(余额校验) → admin 打款(扣余额+流水) → 驳回分支。"""
+    p1 = login(client, "liujie", "provider")
+    admin = login(client, "admin", "admin", password="admin123")
+
+    bal_before = client.get("/api/providers/p1", headers=auth(p1["token"])).json()["data"]["balance"]
+
+    # 超额申请被拒
+    r = client.post("/api/provider/p1/withdrawals", headers=auth(p1["token"]),
+                    json={"amount": 999999, "accountName": "测试", "accountNo": "y"})
+    assert r.status_code == 400
+
+    # 正常申请
+    r = client.post("/api/provider/p1/withdrawals", headers=auth(p1["token"]),
+                    json={"amount": 100, "accountName": "建设银行 ****1234", "accountNo": "6227"})
+    assert r.status_code == 200
+    wid = r.json()["data"]["id"]
+
+    # client 不可见提现列表
+    c1 = login(client, "zhangsan", "client")
+    r = client.get("/api/finance/withdrawals", headers=auth(c1["token"]))
+    assert r.status_code == 403
+
+    # 打款：余额扣减 + withdraw 流水 completed
+    r = client.post(f"/api/finance/withdrawals/{wid}/pay", headers=auth(admin["token"]))
+    assert r.status_code == 200
+    bal_after = client.get("/api/providers/p1", headers=auth(p1["token"])).json()["data"]["balance"]
+    assert float(bal_after) == float(bal_before) - 100, f"余额应扣减 100: {bal_before} -> {bal_after}"
+    txs = client.get("/api/finance/transactions?type=withdraw", headers=auth(admin["token"])).json()["data"]
+    assert any(t["status"] == "completed" and float(t["amount"]) == -100 for t in txs), "应产生 completed 提现流水"
+
+    # 已处理的申请不可重复打款
+    r = client.post(f"/api/finance/withdrawals/{wid}/pay", headers=auth(admin["token"]))
+    assert r.status_code == 400
+
+
+def test_withdrawal_reject_flow(client):
+    """驳回：状态 rejected + 对应 pending 流水作废 + 通知本人。"""
+    p2 = login(client, "wangyi", "provider")
+    admin = login(client, "admin", "admin", password="admin123")
+    r = client.post("/api/provider/p2/withdrawals", headers=auth(p2["token"]),
+                    json={"amount": 50, "accountName": "工商银行 ****5678", "accountNo": "6222"})
+    assert r.status_code == 200
+    wid = r.json()["data"]["id"]
+    r = client.post(f"/api/finance/withdrawals/{wid}/reject", headers=auth(admin["token"]))
+    assert r.status_code == 200
+    lst = client.get("/api/finance/withdrawals", headers=auth(admin["token"])).json()["data"]
+    mine = [w for w in lst if w["id"] == wid]
+    assert mine and mine[0]["status"] == "rejected"
+    # 未登录不可见
+    r = client.get("/api/finance/withdrawals")
+    assert r.status_code == 401
+
+
+def test_certification_upload_and_permission(client):
+    """资质上传：本人可传（落盘+落库），他人不可传，非法类型被拒。"""
+    import base64
+
+    p3 = login(client, "xiaoli", "provider")
+    b64 = base64.b64encode(b"e2e-cert-file").decode()
+    r = client.post("/api/providers/p3/certifications", headers=auth(p3["token"]),
+                    json={"docType": "skill_cert", "filename": "cert.txt", "dataBase64": b64})
+    assert r.status_code == 200
+    file_path = r.json()["data"]["filePath"]
+    assert file_path.startswith("/uploads/p3/")
+    assert os.path.exists(os.path.join(_PROJECT_ROOT, "backend", "uploads", file_path[len("/uploads/"):].replace("/", os.sep))), "文件应落盘"
+
+    r = client.get("/api/providers/p3/certifications", headers=auth(p3["token"]))
+    assert r.status_code == 200 and any(f["docType"] == "skill_cert" for f in r.json()["data"])
+
+    c1 = login(client, "zhangsan", "client")
+    r = client.post("/api/providers/p3/certifications", headers=auth(c1["token"]),
+                    json={"docType": "skill_cert", "filename": "x.txt", "dataBase64": b64})
+    assert r.status_code == 403, "非本人不可上传他人材料"
+
+    r = client.post("/api/providers/p3/certifications", headers=auth(p3["token"]),
+                    json={"docType": "hacker", "filename": "x.txt", "dataBase64": b64})
+    assert r.status_code in (400, 422), "非法材料类型应被拒"
+
+    # 提交新材料后认证状态重置为 pending，且管理员收到通知
+    status = client.get("/api/providers/p3", headers=auth(p3["token"])).json()["data"]["certificationStatus"]
+    assert status == "pending"
+    admin = login(client, "admin", "admin", password="admin123")
+    notifs = client.get("/api/notifications", headers=auth(admin["token"])).json()["data"]
+    assert any("资质审核待处理" in n["title"] for n in notifs)
+
+
+def test_verify_provider_notifies(client):
+    """审核通过后应向家政员本人发送通知。"""
+    admin = login(client, "admin", "admin", password="admin123")
+    r = client.put("/api/providers/p3/verify", headers=auth(admin["token"]))
+    assert r.status_code == 200
+    p3 = login(client, "xiaoli", "provider")
+    notifs = client.get("/api/notifications", headers=auth(p3["token"])).json()["data"]
+    assert any("资质审核通过" in n["title"] for n in notifs), "审核结果应通知本人"
+
+
+def test_provider_earnings_trends(client):
+    """收入趋势：week/month/year 三组真实聚合数据。"""
+    p1 = login(client, "liujie", "provider")
+    r = client.get("/api/provider/p1/earnings", headers=auth(p1["token"]))
+    assert r.status_code == 200
+    trends = r.json()["data"]["trends"]
+    assert set(trends.keys()) == {"week", "month", "year"}
+    assert len(trends["week"]) == 7 and len(trends["year"]) == 12
+    assert all("label" in d and "amount" in d for d in trends["week"])
+    # 周合计应等于年合计中本月以后无收入时的真实收入（宽松断言：年合计 >= 周合计）
+    assert sum(d["amount"] for d in trends["year"]) >= sum(d["amount"] for d in trends["week"]) - 0.01
+
+    # 他人不可见
+    p2 = login(client, "wangyi", "provider")
+    r = client.get("/api/provider/p1/earnings", headers=auth(p2["token"]))
+    assert r.status_code == 400
+
+
+def test_change_password_flow(client):
+    """修改密码：旧密码错误被拒；改密后新密码可登录（测试内改回）。"""
+    p2 = login(client, "wangyi", "provider")
+    token = p2["token"]
+
+    r = client.put("/api/auth/password", headers=auth(token), json={"oldPassword": "wrong", "newPassword": "newpass66"})
+    assert r.status_code == 400, "旧密码错误应 400"
+
+    r = client.put("/api/auth/password", headers=auth(token), json={"oldPassword": "123456", "newPassword": "123456"})
+    assert r.status_code == 400, "新密码不能与原密码相同"
+
+    r = client.put("/api/auth/password", headers=auth(token), json={"oldPassword": "123456", "newPassword": "newpass66"})
+    assert r.status_code == 200
+    r = client.post("/api/auth/login", json={"username": "wangyi", "role": "provider", "password": "newpass66"})
+    assert r.status_code == 200, "新密码应可登录"
+    # 改回，避免影响其他用例
+    r = client.put("/api/auth/password", headers=auth(r.json()["data"]["token"]),
+                   json={"oldPassword": "newpass66", "newPassword": "123456"})
+    assert r.status_code == 200
+    r = client.post("/api/auth/login", json={"username": "wangyi", "role": "provider", "password": "123456"})
+    assert r.status_code == 200
+
+
+def test_order_list_includes_provider_phone(client):
+    """订单列表/详情返回 providerPhone（联系双方功能数据来源）。"""
+    admin = login(client, "admin", "admin", password="admin123")
+    r = client.get("/api/orders", headers=auth(admin["token"]))
+    assert r.status_code == 200
+    assigned = [o for o in r.json()["data"] if o.get("providerId")]
+    assert assigned, "种子数据中应有已分配订单"
+    assert any(o.get("providerPhone") for o in assigned), "已分配订单应带家政员电话"

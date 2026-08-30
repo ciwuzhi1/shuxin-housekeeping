@@ -1,12 +1,19 @@
-import React, { useState } from 'react';
-import { CreditCard, TrendingUp, DollarSign, ArrowUpRight, ArrowDownRight, Download, X, CheckCircle } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { CreditCard, TrendingUp, DollarSign, ArrowUpRight, ArrowDownRight, Download, X, CheckCircle, XCircle } from 'lucide-react';
 import { financeApi } from '../../api';
 import { mockFinancialSummary, mockTransactions } from '../../mock/data';
 import { useApiData } from '../../hooks/useApiData';
 
+type Withdrawal = {
+  id: string; userId: string; userName: string; amount: number;
+  accountName: string; accountNo: string; status: string; createdAt: string; processedAt?: string;
+};
+
 export default function AdminFinance() {
   const [timeRange, setTimeRange] = useState<'week' | 'month' | 'year'>('month');
   const [showPayoutModal, setShowPayoutModal] = useState(false);
+  const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([]);
+  const [processing, setProcessing] = useState(false);
 
   const { data: finance, apiMode } = useApiData(
     () => financeApi.getSummary(),
@@ -21,6 +28,12 @@ export default function AdminFinance() {
     []
   );
 
+  // 真实提现申请列表（admin 全量）
+  const loadWithdrawals = useCallback(() => {
+    financeApi.getWithdrawals().then(setWithdrawals).catch(() => setWithdrawals([]));
+  }, []);
+  useEffect(() => { loadWithdrawals(); }, [loadWithdrawals]);
+
   const stats = [
     { icon: DollarSign, label: '总收入', value: '¥' + ((finance.totalRevenue || 0) / 10000).toFixed(1) + '万', change: '+20.1%', up: true, bgColor: 'bg-blue-100', iconColor: 'text-blue-600' },
     { icon: TrendingUp, label: '本月收入', value: '¥' + (finance.monthlyRevenue || 0).toLocaleString(), change: '+12.3%', up: true, bgColor: 'bg-green-100', iconColor: 'text-green-600' },
@@ -28,10 +41,44 @@ export default function AdminFinance() {
     { icon: DollarSign, label: '平均客单价', value: '¥' + (finance.averageOrderValue || 0), change: '+3.1%', up: true, bgColor: 'bg-purple-100', iconColor: 'text-purple-600' },
   ];
 
-  const payoutRequests = [
-    { id: 'w1', name: '王姨', amount: 1500, account: '工商银行 ****5678', status: 'pending', date: '2025-07-02' },
-    { id: 'w2', name: '刘姐', amount: 2000, account: '建设银行 ****1234', status: 'completed', date: '2025-07-01' },
-  ];
+  const pendingWithdrawals = withdrawals.filter(r => r.status === 'pending');
+
+  // 打款/驳回：调用真实接口后刷新列表
+  const processWithdrawal = async (id: string, action: 'pay' | 'reject') => {
+    setProcessing(true);
+    try {
+      if (action === 'pay') await financeApi.payWithdrawal(id);
+      else await financeApi.rejectWithdrawal(id);
+      loadWithdrawals();
+    } catch (e: any) {
+      alert('操作失败：' + (e?.message || '请重试'));
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  // 导出报表：用真实流水生成 CSV 下载
+  const exportCsv = async () => {
+    try {
+      const list = (transactions as any[]) || [];
+      const header = '类型,描述,金额,状态,时间';
+      const typeText = (t: string) => (t === 'income' ? '收入' : t === 'refund' ? '退款' : t === 'withdraw' ? '提现' : '佣金');
+      const statusText = (s: string) => (s === 'completed' ? '已完成' : s === 'pending' ? '处理中' : '已作废');
+      const rows = list.map(t =>
+        [typeText(t.type), '"' + String(t.description || '').replace(/"/g, '""') + '"', Number(t.amount), statusText(t.status), t.createdAt].join(',')
+      );
+      const csv = '\ufeff' + [header, ...rows].join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = '财务流水_' + new Date().toISOString().slice(0, 10) + '.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      alert('导出失败：' + (e?.message || '请重试'));
+    }
+  };
 
   return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
@@ -53,7 +100,7 @@ export default function AdminFinance() {
               <span className={'w-2 h-2 rounded-full ' + (apiMode ? 'bg-green-500' : 'bg-yellow-500')} />
               {apiMode ? 'API 数据' : 'Mock'}
             </span>
-            <button onClick={() => alert('报表导出功能开发中')} className="btn-secondary text-sm flex items-center gap-1">
+            <button onClick={exportCsv} className="btn-secondary text-sm flex items-center gap-1">
               <Download className="w-4 h-4" /> 导出报表
             </button>
           </div>
@@ -119,28 +166,29 @@ export default function AdminFinance() {
         <div className="card">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold text-gray-900">提现管理</h2>
-            {payoutRequests.filter(r => r.status === 'pending').length > 0 && (
+            {pendingWithdrawals.length > 0 && (
               <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium">
-                {payoutRequests.filter(r => r.status === 'pending').length} 笔待处理
+                {pendingWithdrawals.length} 笔待处理
               </span>
             )}
           </div>
           <div className="space-y-3">
-            {payoutRequests.map(r => (
+            {withdrawals.slice(0, 4).map(r => (
               <div key={r.id} className="flex items-center justify-between p-3 border border-gray-100 rounded-xl">
                 <div>
-                  <p className="font-medium text-gray-900 text-sm">{r.name}</p>
-                  <p className="text-xs text-gray-400">{r.account}</p>
-                  <p className="text-xs text-gray-400">{r.date}</p>
+                  <p className="font-medium text-gray-900 text-sm">{r.userName}</p>
+                  <p className="text-xs text-gray-400">{r.accountName} {r.accountNo}</p>
+                  <p className="text-xs text-gray-400">{String(r.createdAt).slice(0, 10)}</p>
                 </div>
                 <div className="text-right">
                   <p className="font-bold text-gray-900">¥{r.amount}</p>
-                  <span className={'text-xs font-medium ' + (r.status === 'completed' ? 'text-green-600' : 'text-yellow-600')}>
-                    {r.status === 'completed' ? '已打款' : '待处理'}
+                  <span className={'text-xs font-medium ' + (r.status === 'paid' ? 'text-green-600' : r.status === 'rejected' ? 'text-red-500' : 'text-yellow-600')}>
+                    {r.status === 'paid' ? '已打款' : r.status === 'rejected' ? '已驳回' : '待处理'}
                   </span>
                 </div>
               </div>
             ))}
+            {withdrawals.length === 0 && <p className="text-center text-gray-400 text-sm py-4">暂无提现记录</p>}
             <button onClick={() => setShowPayoutModal(true)} className="btn-secondary w-full text-sm">处理提现</button>
           </div>
         </div>
@@ -189,7 +237,7 @@ export default function AdminFinance() {
         </div>
       </div>
 
-      {/* 提现弹窗 */}
+      {/* 提现弹窗：真实打款/驳回 */}
       {showPayoutModal && (
         <div className="modal-overlay" onClick={() => setShowPayoutModal(false)}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
@@ -198,19 +246,32 @@ export default function AdminFinance() {
               <button onClick={() => setShowPayoutModal(false)}><X className="w-5 h-5" /></button>
             </div>
             <div className="space-y-3">
-              {payoutRequests.filter(r => r.status === 'pending').map(r => (
+              {pendingWithdrawals.map(r => (
                 <div key={r.id} className="flex items-center justify-between p-3 border border-gray-100 rounded-xl">
                   <div>
-                    <p className="font-medium text-gray-900">{r.name}</p>
-                    <p className="text-sm text-gray-500">{r.account}</p>
+                    <p className="font-medium text-gray-900">{r.userName}</p>
+                    <p className="text-sm text-gray-500">{r.accountName} {r.accountNo}</p>
                     <p className="text-lg font-bold text-blue-600 mt-1">¥{r.amount}</p>
                   </div>
-                  <button onClick={() => { alert('已打款！'); setShowPayoutModal(false); }} className="btn-success flex items-center gap-1">
-                    <CheckCircle className="w-4 h-4" /> 确认打款
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      disabled={processing}
+                      onClick={() => processWithdrawal(r.id, 'pay')}
+                      className="btn-success flex items-center gap-1 disabled:opacity-50"
+                    >
+                      <CheckCircle className="w-4 h-4" /> 确认打款
+                    </button>
+                    <button
+                      disabled={processing}
+                      onClick={() => processWithdrawal(r.id, 'reject')}
+                      className="px-3 py-2 rounded-lg text-sm text-red-600 border border-red-200 hover:bg-red-50 disabled:opacity-50 flex items-center gap-1"
+                    >
+                      <XCircle className="w-4 h-4" /> 驳回
+                    </button>
+                  </div>
                 </div>
               ))}
-              {payoutRequests.filter(r => r.status === 'pending').length === 0 && (
+              {pendingWithdrawals.length === 0 && (
                 <p className="text-center py-8 text-gray-400">暂无待处理的提现申请</p>
               )}
             </div>

@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../store/AuthContext';
-import { orderApi, notificationApi, providerDataApi } from '../../api';
+import { orderApi, notificationApi, providerDataApi, providerApi } from '../../api';
 import { mockOrders, mockNotifications } from '../../mock/data';
 import type { ServiceProvider } from '../../types';
 import { Star, Briefcase, CalendarCheck, TrendingUp, ChevronRight, Bell, CheckCircle } from 'lucide-react';
@@ -11,6 +11,29 @@ export default function ProviderDashboard() {
   const { user } = useAuth();
   const provider = user as ServiceProvider;
   const navigate = useNavigate();
+  // 上下线状态：从后端加载，切换调用真实接口
+  const [online, setOnline] = useState<boolean | null>(null);
+  const [toggling, setToggling] = useState(false);
+
+  useEffect(() => {
+    if (!provider?.id) return;
+    providerApi.getDetail(provider.id)
+      .then((p: any) => setOnline(p?.status === 'online'))
+      .catch(() => setOnline(provider?.status === 'online'));
+  }, [provider?.id, provider?.status]);
+
+  const toggleOnline = async () => {
+    if (!provider?.id || toggling) return;
+    setToggling(true);
+    try {
+      await providerApi.updateStatus(provider.id, online ? 'offline' : 'online');
+      setOnline(!online);
+    } catch (e: any) {
+      alert('切换失败：' + (e?.message || '请重试'));
+    } finally {
+      setToggling(false);
+    }
+  };
 
   const combined = useApiData(
     async () => {
@@ -80,11 +103,16 @@ export default function ProviderDashboard() {
           </div>
           <div className="flex items-center gap-4">
             <div className="text-right">
-              <p className="text-sm text-emerald-100">当前状态</p>
-              <span className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-500 rounded-full text-sm font-medium">
-                <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
-                在线接单中
-              </span>
+              <p className="text-sm text-emerald-100">接单状态</p>
+              <button
+                onClick={toggleOnline}
+                disabled={toggling || online === null}
+                className={'inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium transition-colors disabled:opacity-60 ' +
+                  (online ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-gray-500 hover:bg-gray-600')}
+              >
+                <span className={'w-2 h-2 bg-white rounded-full ' + (online ? 'animate-pulse' : 'opacity-60')} />
+                {online === null ? '加载中' : online ? '在线接单中 · 点击下线' : '已离线 · 点击上线'}
+              </button>
             </div>
             <div className="w-14 h-14 bg-emerald-500 rounded-full flex items-center justify-center text-2xl font-bold">
               {(provider?.name || '?').charAt(0)}

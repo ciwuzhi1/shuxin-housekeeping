@@ -1,9 +1,17 @@
-import React, { useState } from 'react';
-import { ShieldCheck, Star, Search, CheckCircle, XCircle, X } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { ShieldCheck, Star, Search, CheckCircle, XCircle, X, FileText } from 'lucide-react';
 import { providerApi } from '../../api';
 import { mockProviders, getStatusText } from '../../mock/data';
 import { useApiData } from '../../hooks/useApiData';
 import type { ServiceProvider } from '../../types';
+
+// 材料类型 → 展示名
+const DOC_LABELS: Record<string, string> = {
+  idcard_front: '身份证正面',
+  idcard_back: '身份证反面',
+  health_cert: '健康证明',
+  skill_cert: '技能证书',
+};
 
 export default function AdminProviders() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -29,6 +37,16 @@ export default function AdminProviders() {
   });
 
   const pendingCert = (providers as ServiceProvider[]).filter(p => p.certificationStatus === 'pending');
+
+  // 审核弹窗打开时加载该家政员的真实上传材料
+  const [certFiles, setCertFiles] = useState<any[]>([]);
+  useEffect(() => {
+    if (showCertModal && selectedCert) {
+      providerApi.getCertifications(selectedCert.id).then(setCertFiles).catch(() => setCertFiles([]));
+    } else {
+      setCertFiles([]);
+    }
+  }, [showCertModal, selectedCert]);
 
   const handleVerify = async (provider: ServiceProvider) => {
     if (!confirm(`确认通过 ${provider.name} 的认证申请？`)) return;
@@ -225,21 +243,31 @@ export default function AdminProviders() {
               </div>
             </div>
             <div className="space-y-4 mb-6">
-              <h4 className="font-medium text-gray-900">提交材料</h4>
-              {[
-                { label: '身份证正面', status: '已上传' },
-                { label: '身份证反面', status: '已上传' },
-                { label: '健康证明', status: '已上传' },
-                { label: '技能证书', status: '未上传' },
-              ].map((item, i) => (
-                <div key={i} className="flex items-center justify-between p-3 border border-gray-100 rounded-lg">
-                  <span className="text-sm text-gray-700">{item.label}</span>
-                  <span className={`text-xs font-medium ${item.status === '已上传' ? 'text-green-600' : 'text-gray-400'}`}>
-                    {item.status === '已上传' ? <CheckCircle className="w-4 h-4 inline mr-1" /> : null}
-                    {item.status}
-                  </span>
-                </div>
-              ))}
+              <h4 className="font-medium text-gray-900">提交材料（真实上传记录）</h4>
+              {Object.entries(DOC_LABELS).map(([docType, label]) => {
+                const file = certFiles.find(f => f.docType === docType);
+                return (
+                  <div key={docType} className="flex items-center justify-between p-3 border border-gray-100 rounded-lg">
+                    <span className="text-sm text-gray-700 flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-gray-400" /> {label}
+                    </span>
+                    {file ? (
+                      <a
+                        href={file.filePath}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs font-medium text-green-600 hover:underline"
+                        title={file.filename}
+                      >
+                        <CheckCircle className="w-4 h-4 inline mr-1" />
+                        已上传（{file.filename}）
+                      </a>
+                    ) : (
+                      <span className="text-xs font-medium text-gray-400">未上传</span>
+                    )}
+                  </div>
+                );
+              })}
             </div>
             <div className="flex gap-3">
               <button onClick={() => handleVerify(selectedCert)} className="btn-success flex-1 flex items-center justify-center gap-1">

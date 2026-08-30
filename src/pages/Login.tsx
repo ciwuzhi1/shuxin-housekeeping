@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../store/AuthContext';
-import { LogIn, User, ShieldCheck, Sun } from 'lucide-react';
+import { LogIn, User, ShieldCheck, Sun, ArrowLeft } from 'lucide-react';
 
 export default function Login() {
   const [username, setUsername] = useState('zhangsan');
@@ -9,6 +9,8 @@ export default function Login() {
   const [role, setRole] = useState<'client' | 'provider' | 'admin'>('client');
   const [error, setError] = useState('');
   const [logging, setLogging] = useState(false);
+  // 两步式登录：第一屏选角色，第二屏输入账号密码
+  const [step, setStep] = useState<'select' | 'login'>('select');
   const { login, user: authUser, backendAvailable } = useAuth();
   const navigate = useNavigate();
   const justLoggedRef = useRef(false);
@@ -52,55 +54,82 @@ export default function Login() {
     }
   };
 
-  // 缓冲机制：点击角色卡片仅「选中角色 + 预填账号密码」，不会自动登录，
-  // 需用户再点击「登录」按钮确认后才会进入对应端。
+  // 第一步：点击角色卡片 → 预填演示账号并进入登录表单（不会自动登录）
   const selectRole = (r: 'client' | 'provider' | 'admin') => {
     setUsername(testAccounts[r].username);
     setPassword(testAccounts[r].password);
     setRole(r);
     setError('');
+    setStep('login');
   };
+
+  const currentRole = roles.find(r => r.value === role)!;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-900 flex items-center justify-center p-4">
-      <div className="w-full max-w-5xl">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center gap-3 mb-2">
-            <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-lg">
-              <span className="text-2xl font-bold text-blue-600">舒</span>
+      {/* ===== 第一步：选择端 ===== */}
+      {step === 'select' && (
+        <div className="w-full max-w-5xl">
+          <div className="text-center mb-10">
+            <div className="inline-flex items-center gap-3 mb-2">
+              <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-lg">
+                <span className="text-2xl font-bold text-blue-600">舒</span>
+              </div>
+              <h1 className="text-4xl font-bold text-white">舒心家政</h1>
             </div>
-            <h1 className="text-4xl font-bold text-white">舒心家政</h1>
+            <p className="text-blue-200 text-lg">专业家政服务平台 — 请选择您的入口</p>
           </div>
-          <p className="text-blue-200 text-lg">专业家政服务平台 — 您贴心的家庭服务管家</p>
-        </div>
 
-        <div className="grid md:grid-cols-3 gap-4 mb-6">
-          {roles.map(r => (
-            <button
-              key={r.value}
-              type="button"
-              onClick={() => selectRole(r.value)}
-              className={`p-6 rounded-2xl text-left transition-all duration-200 border-2 ${
-                role === r.value
-                  ? 'bg-white border-blue-400 shadow-xl scale-105'
-                  : 'bg-white/10 border-transparent text-white hover:bg-white/20'
-              }`}
-            >
-              <r.icon className={`w-8 h-8 mb-3 ${role === r.value ? 'text-blue-600' : 'text-blue-200'}`} />
-              <h3 className={`text-lg font-semibold mb-1 ${role === r.value ? 'text-gray-900' : 'text-white'}`}>{r.label}</h3>
-              <p className={`text-sm ${role === r.value ? 'text-gray-500' : 'text-blue-200'}`}>{r.desc}</p>
-              {role === r.value && (
-                <div className="mt-2 text-xs text-blue-500 font-medium">
-                  ✓ 当前选择
+          <div className="grid md:grid-cols-3 gap-5">
+            {roles.map(r => (
+              <button
+                key={r.value}
+                type="button"
+                onClick={() => selectRole(r.value)}
+                className="group p-8 rounded-2xl bg-white/10 border-2 border-transparent text-white hover:bg-white hover:text-gray-900 hover:border-blue-400 hover:shadow-xl hover:scale-105 transition-all duration-200 text-left"
+              >
+                <r.icon className="w-10 h-10 mb-4 text-blue-200 group-hover:text-blue-600" />
+                <h3 className="text-xl font-semibold mb-1">{r.label}</h3>
+                <p className="text-sm text-blue-200 group-hover:text-gray-500">{r.desc}</p>
+                <div className="mt-4 text-xs font-medium text-blue-300 group-hover:text-blue-600">
+                  进入登录 →
                 </div>
-              )}
-            </button>
-          ))}
-        </div>
+              </button>
+            ))}
+          </div>
 
-        <div className="max-w-md mx-auto">
+          <div className="text-center mt-8">
+            <span className={'inline-flex items-center gap-2 text-xs px-3 py-1.5 rounded-full ' + (backendAvailable ? 'bg-green-500/20 text-green-200' : 'bg-yellow-500/20 text-yellow-200')}>
+              <span className={'w-2 h-2 rounded-full ' + (backendAvailable ? 'bg-green-400' : 'bg-yellow-400')} />
+              {backendAvailable ? '后端 API 已连接' : '后端未启动，将使用本地演示数据'}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* ===== 第二步：登录表单 ===== */}
+      {step === 'login' && (
+        <div className="w-full max-w-md">
+          <div className="text-center mb-6">
+            <div className="inline-flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-lg">
+                <span className="text-xl font-bold text-blue-600">舒</span>
+              </div>
+              <h1 className="text-3xl font-bold text-white">舒心家政</h1>
+            </div>
+            <p className="text-blue-200">{currentRole.label} · {currentRole.desc}</p>
+          </div>
+
           <form onSubmit={handleLogin} className="bg-white rounded-2xl shadow-2xl p-8">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">登录</h2>
+            <button
+              type="button"
+              onClick={() => { setStep('select'); setError(''); }}
+              className="flex items-center gap-1 text-sm text-gray-500 hover:text-blue-600 mb-4"
+            >
+              <ArrowLeft className="w-4 h-4" /> 返回重新选择
+            </button>
+
+            <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">{currentRole.label}登录</h2>
 
             {error && (
               <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
@@ -146,17 +175,17 @@ export default function Login() {
                 {backendAvailable ? '✅ 后端 API 已连接，数据通过 HTTP 接口获取' : '⚠️ 后端未启动，使用本地 Mock 数据'}
               </div>
               <div className="p-3 bg-blue-50 rounded-lg">
-                <p className="text-xs text-blue-600 font-medium mb-2">测试账号：点卡片自动填入，再点「登录」进入对应端</p>
-                <div className="space-y-1 text-xs text-blue-500">
-                  <p>• 用户端：zhangsan / 123456</p>
-                  <p>• 家政端：liujie / 123456</p>
-                  <p>• 管理端：admin / admin123</p>
-                </div>
+                <p className="text-xs text-blue-600 font-medium mb-1">演示账号（已自动填入）</p>
+                <p className="text-xs text-blue-500">
+                  {role === 'client' && '• 用户端：zhangsan / 123456'}
+                  {role === 'provider' && '• 家政端：liujie / 123456'}
+                  {role === 'admin' && '• 管理端：admin / admin123'}
+                </p>
               </div>
             </div>
           </form>
         </div>
-      </div>
+      )}
     </div>
   );
 }

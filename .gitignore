@@ -8,6 +8,8 @@ __pycache__/
 backend/.venv/
 .pytest_cache/
 pytest-cache-files-*/
+# 用户上传的资质材料（运行时产物）
+backend/uploads/
 
 # ===== 日志与本地运行产物 =====
 *.log

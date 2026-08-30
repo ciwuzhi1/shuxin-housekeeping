@@ -4,6 +4,7 @@
 """
 
 import logging
+import os
 import time
 import uuid
 from collections import defaultdict
@@ -12,6 +13,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from .config import settings
 from .database import init_db, row
@@ -125,3 +127,8 @@ app.include_router(finance.router, prefix="/api/finance", tags=["finance"])
 app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 app.include_router(client.router, prefix="/api/client", tags=["client"])
 app.include_router(provider.router, prefix="/api/provider", tags=["provider"])
+
+# 资质材料上传目录（certification_files.file_path 指向此处）
+_UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "uploads")
+os.makedirs(_UPLOAD_DIR, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=_UPLOAD_DIR), name="uploads")

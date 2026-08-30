@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { BarChart3, Users, ShieldCheck, FileText, CreditCard, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { adminApi, orderApi } from '../../api';
 import { mockAdminStats, mockOrders } from '../../mock/data';
@@ -6,6 +7,7 @@ import { getStatusText } from '../../mock/data';
 import { useApiData } from '../../hooks/useApiData';
 
 export default function AdminDashboard() {
+  const navigate = useNavigate();
   const { data: stats, loading, apiMode } = useApiData(
     () => adminApi.getStats(),
     mockAdminStats as any,
@@ -20,10 +22,10 @@ export default function AdminDashboard() {
   );
 
   const statCards = [
-    { icon: Users, label: '总用户数', value: (stats.totalUsers || 0).toLocaleString(), change: '+12.5%', up: true, bgColor: 'bg-blue-100', iconColor: 'text-blue-600' },
-    { icon: ShieldCheck, label: '家政人员', value: (stats.totalProviders || 0).toLocaleString(), change: '+8.2%', up: true, bgColor: 'bg-green-100', iconColor: 'text-green-600' },
-    { icon: FileText, label: '总订单数', value: (stats.totalOrders || 0).toLocaleString(), change: '+15.3%', up: true, bgColor: 'bg-purple-100', iconColor: 'text-purple-600' },
-    { icon: CreditCard, label: '总收入', value: ('¥' + ((stats.totalRevenue || 0) / 10000).toFixed(1) + '万'), change: '+20.1%', up: true, bgColor: 'bg-orange-100', iconColor: 'text-orange-600' },
+    { icon: Users, label: '总用户数', value: (stats.totalUsers || 0).toLocaleString(), change: '+12.5%', up: true, bgColor: 'bg-blue-100', iconColor: 'text-blue-600', to: '/admin/users' },
+    { icon: ShieldCheck, label: '家政人员', value: (stats.totalProviders || 0).toLocaleString(), change: '+8.2%', up: true, bgColor: 'bg-green-100', iconColor: 'text-green-600', to: '/admin/providers' },
+    { icon: FileText, label: '总订单数', value: (stats.totalOrders || 0).toLocaleString(), change: '+15.3%', up: true, bgColor: 'bg-purple-100', iconColor: 'text-purple-600', to: '/admin/orders' },
+    { icon: CreditCard, label: '总收入', value: ('¥' + ((stats.totalRevenue || 0) / 10000).toFixed(1) + '万'), change: '+20.1%', up: true, bgColor: 'bg-orange-100', iconColor: 'text-orange-600', to: '/admin/finance' },
   ];
 
   const recentOrderList = (recentOrders as any[]).slice(0, 5);
@@ -50,7 +52,12 @@ export default function AdminDashboard() {
       {/* 统计卡片 */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {statCards.map((s, i) => (
-          <div key={i} className="card hover:shadow-md transition-shadow">
+          <div
+            key={i}
+            className="card hover:shadow-lg hover:-translate-y-0.5 transition-all cursor-pointer"
+            onClick={() => s.to && navigate(s.to)}
+            title={'查看' + s.label + '详情'}
+          >
             <div className="flex items-center justify-between mb-3">
               <div className={'w-10 h-10 ' + s.bgColor + ' rounded-lg flex items-center justify-center'}>
                 <s.icon className={'w-5 h-5 ' + s.iconColor} />
@@ -71,21 +78,21 @@ export default function AdminDashboard() {
         <div className="card lg:col-span-1">
           <h2 className="font-semibold text-gray-900 mb-4">待处理事项</h2>
           <div className="space-y-3">
-            <div className="flex items-center justify-between p-3 bg-yellow-50 rounded-xl border border-yellow-200">
+            <div className="flex items-center justify-between p-3 bg-yellow-50 rounded-xl border border-yellow-200 cursor-pointer hover:border-yellow-400 transition-colors" onClick={() => navigate('/admin/providers')}>
               <div>
                 <p className="font-medium text-gray-900 text-sm">待审核认证</p>
                 <p className="text-xs text-yellow-600">{stats.pendingCertifications || 0} 名家政人员等待审核</p>
               </div>
               <span className="text-lg font-bold text-yellow-600">{stats.pendingCertifications || 0}</span>
             </div>
-            <div className="flex items-center justify-between p-3 bg-red-50 rounded-xl border border-red-200">
+            <div className="flex items-center justify-between p-3 bg-red-50 rounded-xl border border-red-200 cursor-pointer hover:border-red-400 transition-colors" onClick={() => navigate('/admin/finance')}>
               <div>
                 <p className="font-medium text-gray-900 text-sm">退款申请</p>
                 <p className="text-xs text-red-600">{stats.pendingRefunds || 0} 个退款请求待处理</p>
               </div>
               <span className="text-lg font-bold text-red-600">{stats.pendingRefunds || 0}</span>
             </div>
-            <div className="flex items-center justify-between p-3 bg-blue-50 rounded-xl border border-blue-200">
+            <div className="flex items-center justify-between p-3 bg-blue-50 rounded-xl border border-blue-200 cursor-pointer hover:border-blue-400 transition-colors" onClick={() => navigate('/admin/users')}>
               <div>
                 <p className="font-medium text-gray-900 text-sm">今日新增</p>
                 <p className="text-xs text-blue-600">{stats.newUsersToday || 0} 名新用户注册</p>

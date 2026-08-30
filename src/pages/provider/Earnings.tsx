@@ -45,19 +45,30 @@ export default function ProviderEarnings() {
   ];
 
   const handleWithdraw = async () => {
-    const amount = prompt('请输入提现金额：', '1000');
+    const amount = prompt('请输入提现金额（元）：', '500');
     if (!amount) return;
-    const numAmount = parseInt(amount);
+    const numAmount = parseFloat(amount);
     if (isNaN(numAmount) || numAmount <= 0) { alert('请输入有效金额'); return; }
-    if (numAmount > (provider?.balance || 0)) { alert('余额不足！'); return; }
+    if (numAmount > Number(earnings.balance ?? provider?.balance ?? 0)) { alert('余额不足！'); return; }
     try {
-      alert('提现申请已提交！\n提现金额：¥' + numAmount + '\n预计1-3个工作日到账。');
-    } catch {
-      alert('提现失败，请重试');
+      // 真实提现申请：校验余额、写 pending 申请与流水、通知管理员
+      await providerDataApi.requestWithdrawal(provider.id, {
+        amount: numAmount,
+        accountName: provider?.name || '',
+        accountNo: '建设银行 ****1234',
+      });
+      alert('提现申请已提交！\n提现金额：¥' + numAmount + '\n等待管理员打款，可在流水中查看进度。');
+      combined.reload();
+    } catch (e: any) {
+      alert('提现失败：' + (e?.message || '请重试'));
     }
   };
 
   const recentTransactions = transactions.slice(0, 5);
+  // 真实趋势数据（后端按周/月/年聚合本人 income 流水）
+  const trendData: { label: string; amount: number }[] =
+    (earnings.trends && earnings.trends[timeRange]) || [];
+  const trendMax = Math.max(1, ...trendData.map(d => d.amount));
 
   return (
     <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-6">
@@ -111,13 +122,16 @@ export default function ProviderEarnings() {
           </div>
         </div>
         <div className="h-48 flex items-end gap-2">
-          {[3200, 2800, 3600, 4100, 3800, 4500, 4200].map((v, i) => (
+          {trendData.length === 0 && (
+            <p className="w-full text-center py-12 text-gray-400 text-sm">暂无趋势数据（后端不可用时显示空图）</p>
+          )}
+          {trendData.map((d, i) => (
             <div key={i} className="flex-1 flex flex-col items-center gap-1">
-              <span className="text-xs text-gray-500">¥{v}</span>
-              <div className="w-full bg-blue-100 rounded-t-lg relative" style={{ height: String((v / 4500) * 150) + 'px' }}>
+              <span className="text-xs text-gray-500">{d.amount > 0 ? '¥' + d.amount : ''}</span>
+              <div className="w-full bg-blue-100 rounded-t-lg relative" style={{ height: String((d.amount / trendMax) * 150) + 'px' }}>
                 <div className="absolute bottom-0 left-0 right-0 bg-blue-500 rounded-t-lg" style={{ height: '100%' }} />
               </div>
-              <span className="text-xs text-gray-400">{['周一', '周二', '周三', '周四', '周五', '周六', '周日'][i]}</span>
+              <span className="text-xs text-gray-400">{d.label}</span>
             </div>
           ))}
         </div>

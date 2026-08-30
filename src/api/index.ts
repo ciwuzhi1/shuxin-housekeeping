@@ -90,12 +90,15 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
 }
 
 // ==================== 认证 ====================
-// FastAPI 后端已启用密码校验：登录必须携带 password（SHA-256 哈希比对）。
+// FastAPI 后端已启用密码校验：登录必须携带 password（Argon2id 哈希比对）。
 export const authApi = {
   login: (username: string, role: string, password: string) =>
     request<{ token: string } & User>('/auth/login', { method: 'POST', body: { username, role, password } }),
   // 刷新页面后凭 token 恢复登录态
   me: () => request<User>('/auth/me'),
+  // 修改本人密码（校验旧密码）
+  changePassword: (oldPassword: string, newPassword: string) =>
+    request<any>('/auth/password', { method: 'PUT', body: { oldPassword, newPassword } }),
 };
 
 // ==================== 服务分类 ====================
@@ -106,9 +109,20 @@ export const categoryApi = {
 // ==================== 服务人员 ====================
 export const providerApi = {
   getAll: (params?: Record<string, string>) => request<ServiceProvider[]>('/providers', { params }),
+  getDetail: (id: string) => request<ServiceProvider>('/providers/' + id),
   verify: (id: string) => request<any>('/providers/' + id + '/verify', { method: 'PUT' }),
   reject: (id: string, reason?: string) =>
     request<any>('/providers/' + id + '/reject', { method: 'PUT', body: { reason } }),
+  // 上下线切换（仅本人或 admin）
+  updateStatus: (id: string, status: 'online' | 'offline') =>
+    request<any>('/providers/' + id + '/status', { method: 'PUT', body: { status } }),
+  // 资质材料
+  getCertifications: (id: string) =>
+    request<{ id: string; docType: string; filename: string; filePath: string; createdAt: string }[]>(
+      '/providers/' + id + '/certifications'
+    ),
+  uploadCertification: (id: string, data: { docType: string; filename: string; dataBase64: string }) =>
+    request<any>('/providers/' + id + '/certifications', { method: 'POST', body: data }),
 };
 
 // ==================== 订单 ====================
@@ -132,24 +146,41 @@ export const notificationApi = {
   markRead: (id: string) => request<any>('/notifications/' + id + '/read', { method: 'PUT' }),
   markAllRead: (userId?: string) =>
     request<any>('/notifications/read-all', { method: 'PUT', params: userId ? { userId } : undefined }),
+  // 管理员向指定用户发送通知（真实落库）
+  send: (data: { userId: string; title: string; content: string; type?: string }) =>
+    request<any>('/notifications', { method: 'POST', body: data }),
 };
 
 // ==================== 财务 ====================
 export const financeApi = {
   getSummary: () => request<FinancialSummary>('/finance/summary'),
   getTransactions: (params?: Record<string, string>) => request<Transaction[]>('/finance/transactions', { params }),
+  // 提现管理：admin 全量 / provider 本人
+  getWithdrawals: (params?: Record<string, string>) =>
+    request<{ id: string; userId: string; userName: string; amount: number; accountName: string; accountNo: string; status: string; createdAt: string; processedAt?: string }[]>(
+      '/finance/withdrawals', { params }
+    ),
+  payWithdrawal: (id: string) => request<any>('/finance/withdrawals/' + id + '/pay', { method: 'POST' }),
+  rejectWithdrawal: (id: string) => request<any>('/finance/withdrawals/' + id + '/reject', { method: 'POST' }),
 };
 
 // ==================== 管理后台 ====================
 export const adminApi = {
   getStats: () => request<AdminStats>('/admin/stats'),
   getUsers: (params?: Record<string, string>) => request<User[]>('/admin/users', { params }),
+  // 平台设置（key-value，真实读写）
+  getSettings: () => request<Record<string, string>>('/admin/settings'),
+  saveSettings: (data: Record<string, string>) =>
+    request<Record<string, string>>('/admin/settings', { method: 'PUT', body: data }),
 };
 
 // ==================== 家政人员端数据 ====================
 export const providerDataApi = {
   getOrders: (providerId: string) => request<Order[]>('/provider/' + providerId + '/orders'),
   getEarnings: (providerId: string) => request<any>('/provider/' + providerId + '/earnings'),
+  // 提现申请（校验余额，真实落库）
+  requestWithdrawal: (providerId: string, data: { amount: number; accountName: string; accountNo: string }) =>
+    request<any>('/provider/' + providerId + '/withdrawals', { method: 'POST', body: data }),
 };
 
 // ==================== 用户端数据 ====================

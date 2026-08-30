@@ -1,8 +1,11 @@
-import React, { useState } from 'react';
-import { Settings, Save, Bell, Shield, DollarSign, RefreshCw } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Settings, Save, Bell, Shield, DollarSign, KeyRound } from 'lucide-react';
+import { adminApi, authApi } from '../../api';
+import { useAuth } from '../../store/AuthContext';
 
 export default function AdminSystem() {
   const [activeTab, setActiveTab] = useState('basic');
+  const { user } = useAuth();
 
   const tabs = [
     { key: 'basic', label: '基本设置', icon: Settings },
@@ -11,27 +14,63 @@ export default function AdminSystem() {
     { key: 'security', label: '安全设置', icon: Shield },
   ];
 
-  const [form, setForm] = useState({
-    platformName: '舒心家政',
-    platformPhone: '400-888-8888',
-    workStartTime: '08:00',
-    workEndTime: '20:00',
-    commissionRate: '15',
-    minWithdraw: '100',
-    maxWithdraw: '50000',
-    serviceRadius: '10',
-    cancelTimeLimit: '24',
-    orderTimeout: '30',
-    newUserCoupon: '50',
-    referralReward: '30',
-    enableSMS: true,
-    enableAutoDispatch: true,
-    enableRating: true,
-    maintenanceMode: false,
+  // 与后端 settings 表键一一对应（未知键会被后端拒绝）
+  const [form, setForm] = useState<Record<string, string>>({
+    platform_name: '',
+    service_phone: '',
+    work_start: '',
+    work_end: '',
+    service_radius: '10',
+    auto_dispatch: 'true',
+    commission_rate: '15',
+    notify_new_order: 'true',
+    notify_income: 'true',
+    notify_review: 'true',
   });
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState('');
 
-  const handleSave = () => {
-    alert('设置已保存！');
+  // 修改密码表单
+  const [oldPwd, setOldPwd] = useState('');
+  const [newPwd, setNewPwd] = useState('');
+  const [pwdMsg, setPwdMsg] = useState('');
+  const [pwdSaving, setPwdSaving] = useState(false);
+
+  useEffect(() => {
+    adminApi.getSettings()
+      .then(s => setForm(prev => ({ ...prev, ...s })))
+      .catch(() => setSaveMsg('⚠️ 无法加载设置（后端不可用），显示默认值'));
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setSaveMsg('');
+    try {
+      const saved = await adminApi.saveSettings(form);
+      setForm(prev => ({ ...prev, ...saved }));
+      setSaveMsg('✅ 设置已保存到数据库');
+    } catch (e: any) {
+      setSaveMsg('❌ 保存失败：' + (e?.message || '请重试'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggle = (key: string) => setForm(prev => ({ ...prev, [key]: prev[key] === 'true' ? 'false' : 'true' }));
+
+  const changePwd = async () => {
+    setPwdSaving(true);
+    setPwdMsg('');
+    try {
+      await authApi.changePassword(oldPwd, newPwd);
+      setPwdMsg('✅ 密码已修改，下次登录请使用新密码');
+      setOldPwd('');
+      setNewPwd('');
+    } catch (e: any) {
+      setPwdMsg('❌ ' + (e?.message || '修改失败'));
+    } finally {
+      setPwdSaving(false);
+    }
   };
 
   return (
@@ -40,9 +79,14 @@ export default function AdminSystem() {
         <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
           <Settings className="w-6 h-6" /> 系统设置
         </h1>
-        <button onClick={handleSave} className="btn-primary flex items-center gap-2">
-          <Save className="w-4 h-4" /> 保存设置
-        </button>
+        {activeTab !== 'security' && (
+          <div className="flex items-center gap-3">
+            {saveMsg && <span className={'text-sm ' + (saveMsg.startsWith('✅') ? 'text-green-600' : 'text-yellow-600')}>{saveMsg}</span>}
+            <button onClick={handleSave} disabled={saving} className="btn-primary flex items-center gap-2 disabled:opacity-50">
+              <Save className="w-4 h-4" /> {saving ? '保存中...' : '保存设置'}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* 标签页 */}
@@ -64,27 +108,27 @@ export default function AdminSystem() {
           <div className="grid md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">平台名称</label>
-              <input type="text" value={form.platformName} onChange={e => setForm({...form, platformName: e.target.value})} className="input-field" />
+              <input type="text" value={form.platform_name} onChange={e => setForm({ ...form, platform_name: e.target.value })} className="input-field" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">客服热线</label>
-              <input type="text" value={form.platformPhone} onChange={e => setForm({...form, platformPhone: e.target.value})} className="input-field" />
+              <input type="text" value={form.service_phone} onChange={e => setForm({ ...form, service_phone: e.target.value })} className="input-field" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">营业开始时间</label>
-              <input type="time" value={form.workStartTime} onChange={e => setForm({...form, workStartTime: e.target.value})} className="input-field" />
+              <input type="time" value={form.work_start} onChange={e => setForm({ ...form, work_start: e.target.value })} className="input-field" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">营业结束时间</label>
-              <input type="time" value={form.workEndTime} onChange={e => setForm({...form, workEndTime: e.target.value})} className="input-field" />
+              <input type="time" value={form.work_end} onChange={e => setForm({ ...form, work_end: e.target.value })} className="input-field" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">服务半径（公里）</label>
-              <input type="number" value={form.serviceRadius} onChange={e => setForm({...form, serviceRadius: e.target.value})} className="input-field" />
+              <input type="number" value={form.service_radius} onChange={e => setForm({ ...form, service_radius: e.target.value })} className="input-field" />
             </div>
             <div className="flex items-center">
               <label className="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" checked={form.enableAutoDispatch} onChange={e => setForm({...form, enableAutoDispatch: e.target.checked})} className="w-5 h-5 text-blue-600 rounded" />
+                <input type="checkbox" checked={form.auto_dispatch === 'true'} onChange={() => toggle('auto_dispatch')} className="w-5 h-5 text-blue-600 rounded" />
                 <div>
                   <span className="font-medium text-gray-900">启用智能派单</span>
                   <p className="text-sm text-gray-500">系统自动为订单匹配最佳服务人员</p>
@@ -101,24 +145,8 @@ export default function AdminSystem() {
           <div className="grid md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">平台佣金比例（%）</label>
-              <input type="number" value={form.commissionRate} onChange={e => setForm({...form, commissionRate: e.target.value})} className="input-field" />
-              <p className="text-xs text-gray-400 mt-1">建议范围 10%-30%</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">最低提现金额（元）</label>
-              <input type="number" value={form.minWithdraw} onChange={e => setForm({...form, minWithdraw: e.target.value})} className="input-field" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">最高提现金额（元）</label>
-              <input type="number" value={form.maxWithdraw} onChange={e => setForm({...form, maxWithdraw: e.target.value})} className="input-field" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">新用户优惠券（元）</label>
-              <input type="number" value={form.newUserCoupon} onChange={e => setForm({...form, newUserCoupon: e.target.value})} className="input-field" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">推荐奖励（元）</label>
-              <input type="number" value={form.referralReward} onChange={e => setForm({...form, referralReward: e.target.value})} className="input-field" />
+              <input type="number" value={form.commission_rate} onChange={e => setForm({ ...form, commission_rate: e.target.value })} className="input-field" />
+              <p className="text-xs text-gray-400 mt-1">建议范围 10%-30%，保存后生效</p>
             </div>
           </div>
         </div>
@@ -130,17 +158,24 @@ export default function AdminSystem() {
           <div className="space-y-4">
             <label className="flex items-center justify-between p-4 bg-gray-50 rounded-xl cursor-pointer">
               <div>
-                <span className="font-medium text-gray-900">短信通知</span>
-                <p className="text-sm text-gray-500">订单确认、状态变更时发送短信通知</p>
+                <span className="font-medium text-gray-900">新订单提醒</span>
+                <p className="text-sm text-gray-500">客户下单或指派订单时通知家政人员</p>
               </div>
-              <input type="checkbox" checked={form.enableSMS} onChange={e => setForm({...form, enableSMS: e.target.checked})} className="w-5 h-5 text-blue-600 rounded" />
+              <input type="checkbox" checked={form.notify_new_order === 'true'} onChange={() => toggle('notify_new_order')} className="w-5 h-5 text-blue-600 rounded" />
+            </label>
+            <label className="flex items-center justify-between p-4 bg-gray-50 rounded-xl cursor-pointer">
+              <div>
+                <span className="font-medium text-gray-900">收入到账通知</span>
+                <p className="text-sm text-gray-500">订单完成结算后通知家政人员</p>
+              </div>
+              <input type="checkbox" checked={form.notify_income === 'true'} onChange={() => toggle('notify_income')} className="w-5 h-5 text-blue-600 rounded" />
             </label>
             <label className="flex items-center justify-between p-4 bg-gray-50 rounded-xl cursor-pointer">
               <div>
                 <span className="font-medium text-gray-900">服务评价提醒</span>
-                <p className="text-sm text-gray-500">服务完成后提醒客户进行评价</p>
+                <p className="text-sm text-gray-500">收到新评价时通知家政人员</p>
               </div>
-              <input type="checkbox" checked={form.enableRating} onChange={e => setForm({...form, enableRating: e.target.checked})} className="w-5 h-5 text-blue-600 rounded" />
+              <input type="checkbox" checked={form.notify_review === 'true'} onChange={() => toggle('notify_review')} className="w-5 h-5 text-blue-600 rounded" />
             </label>
           </div>
         </div>
@@ -148,30 +183,29 @@ export default function AdminSystem() {
 
       {activeTab === 'security' && (
         <div className="card">
-          <h2 className="font-semibold text-gray-900 mb-6">安全与风控</h2>
-          <div className="grid md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">取消订单时限（小时）</label>
-              <input type="number" value={form.cancelTimeLimit} onChange={e => setForm({...form, cancelTimeLimit: e.target.value})} className="input-field" />
-              <p className="text-xs text-gray-400 mt-1">超过此时限取消需扣除一定费用</p>
+          <h2 className="font-semibold text-gray-900 mb-6">安全设置</h2>
+          <div className="max-w-md space-y-4">
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <KeyRound className="w-4 h-4" />
+              当前账号：{user?.username}（{user?.name}）
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">订单超时时间（分钟）</label>
-              <input type="number" value={form.orderTimeout} onChange={e => setForm({...form, orderTimeout: e.target.value})} className="input-field" />
-              <p className="text-xs text-gray-400 mt-1">服务人员超时未接单则自动取消</p>
+              <label className="block text-sm font-medium text-gray-700 mb-1">原密码</label>
+              <input type="password" value={oldPwd} onChange={e => setOldPwd(e.target.value)} className="input-field" placeholder="请输入原密码" />
             </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">新密码</label>
+              <input type="password" value={newPwd} onChange={e => setNewPwd(e.target.value)} className="input-field" placeholder="至少 6 位" />
+            </div>
+            {pwdMsg && <p className={'text-sm ' + (pwdMsg.startsWith('✅') ? 'text-green-600' : 'text-red-600')}>{pwdMsg}</p>}
+            <button
+              disabled={pwdSaving || !oldPwd || newPwd.length < 6}
+              onClick={changePwd}
+              className="btn-primary disabled:opacity-50"
+            >
+              {pwdSaving ? '提交中...' : '修改密码'}
+            </button>
           </div>
-          <hr className="my-6" />
-          <label className="flex items-center justify-between p-4 bg-red-50 rounded-xl cursor-pointer">
-            <div className="flex items-center gap-3">
-              <RefreshCw className="w-5 h-5 text-red-500" />
-              <div>
-                <span className="font-medium text-red-900">维护模式</span>
-                <p className="text-sm text-red-500">启用后平台暂停服务，仅管理员可访问</p>
-              </div>
-            </div>
-            <input type="checkbox" checked={form.maintenanceMode} onChange={e => setForm({...form, maintenanceMode: e.target.checked})} className="w-5 h-5 text-red-600 rounded" />
-          </label>
         </div>
       )}
     </div>

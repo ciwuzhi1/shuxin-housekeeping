@@ -25,7 +25,8 @@ const AuthContext = createContext<AuthContextType>({
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(false);
+  // 有 token 时初始为 loading：等待 /me 恢复完成，避免刷新瞬间被路由守卫误判未登录
+  const [loading, setLoading] = useState<boolean>(() => !!getToken());
   const [backendAvailable, setBackendAvailable] = useState(true);
 
   // 初始化时检查 localStorage 中是否有 token，并向后端恢复用户会话
@@ -33,6 +34,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const savedToken = getToken();
     if (!savedToken) return;
     setBackendAvailable(true);
+    setLoading(true);
     // 修复：刷新页面后凭 token 调 /api/auth/me 恢复登录态，避免"刷新即登出"
     authApi.me()
       .then((me) => {
@@ -49,7 +51,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           clearToken();
         }
         setBackendAvailable(false);
-      });
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   const login = async (username: string, password: string, role: 'client' | 'provider' | 'admin'): Promise<boolean> => {

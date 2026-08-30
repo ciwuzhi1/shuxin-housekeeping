@@ -1,14 +1,17 @@
 import React, { useState } from 'react';
-import { FileText, Search, X } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { FileText, Search, Phone, X } from 'lucide-react';
 import { orderApi } from '../../api';
 import { mockOrders, getStatusText, getStatusBadge } from '../../mock/data';
 import { useApiData } from '../../hooks/useApiData';
 import type { Order } from '../../types';
 
 export default function AdminOrders() {
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchParams] = useSearchParams();
+  const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [contactOrder, setContactOrder] = useState<Order | null>(null);
 
   // 加载真实订单（管理员可见全部）；后端不可用时降级 Mock
   const { data: orders } = useApiData(
@@ -49,7 +52,7 @@ export default function AdminOrders() {
         <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
           <FileText className="w-6 h-6" /> 订单管理
         </h1>
-        <span className="text-sm text-gray-500">共 {(orders as Order[]).length} 单</span>
+        <span className="text-sm text-gray-500">共 {filtered.length} 单</span>
       </div>
 
       {/* 搜索 */}
@@ -103,7 +106,7 @@ export default function AdminOrders() {
               {order.status === 'cancelled' && order.paymentStatus !== 'refunded' && (
                 <button onClick={() => handleRefund(order)} className="btn-danger text-sm">处理退款</button>
               )}
-              <button onClick={() => alert(`联系客户 ${order.clientName}(${order.clientPhone}) 与 ${order.providerName || '未分配'} 的客服沟通`)} className="btn-secondary text-sm">联系双方</button>
+              <button onClick={() => setContactOrder(order)} className="btn-secondary text-sm">联系双方</button>
             </div>
           </div>
         ))}
@@ -136,6 +139,45 @@ export default function AdminOrders() {
               {selectedOrder.review && (
                 <div><span className="text-gray-500">评价</span><p className="mt-1 p-2 bg-yellow-50 rounded">{'★'.repeat(selectedOrder.rating || 0)} {selectedOrder.review}</p></div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 联系双方弹窗：展示订单双方真实联系方式 */}
+      {contactOrder && (
+        <div className="modal-overlay" onClick={() => setContactOrder(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold">联系双方</h2>
+              <button onClick={() => setContactOrder(null)}><X className="w-5 h-5" /></button>
+            </div>
+            <p className="text-xs text-gray-400 mb-4 font-mono">{contactOrder.orderNo}</p>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-4 bg-blue-50 rounded-xl">
+                <div>
+                  <p className="text-xs text-gray-500">客户</p>
+                  <p className="font-medium text-gray-900">{contactOrder.clientName}</p>
+                  <p className="text-sm text-gray-500 flex items-center gap-1 mt-0.5">
+                    <Phone className="w-3.5 h-3.5" /> {contactOrder.clientPhone}
+                  </p>
+                </div>
+                <a href={'tel:' + contactOrder.clientPhone} className="btn-primary text-sm">拨打电话</a>
+              </div>
+              <div className="flex items-center justify-between p-4 bg-green-50 rounded-xl">
+                <div>
+                  <p className="text-xs text-gray-500">服务人员</p>
+                  <p className="font-medium text-gray-900">{contactOrder.providerName || '未分配'}</p>
+                  <p className="text-sm text-gray-500 flex items-center gap-1 mt-0.5">
+                    <Phone className="w-3.5 h-3.5" /> {contactOrder.providerPhone || '暂无'}
+                  </p>
+                </div>
+                {contactOrder.providerPhone ? (
+                  <a href={'tel:' + contactOrder.providerPhone} className="btn-primary text-sm">拨打电话</a>
+                ) : (
+                  <span className="text-xs text-gray-400">待分配</span>
+                )}
+              </div>
             </div>
           </div>
         </div>

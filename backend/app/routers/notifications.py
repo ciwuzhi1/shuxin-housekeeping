@@ -1,16 +1,33 @@
-"""通知路由：列表 / 标记已读 / 全部已读。
+"""通知路由：列表 / 标记已读 / 全部已读 / 管理员发送。
 
 修复 P0-2/P2-2：列表与已读操作均校验归属；read-all 必须指定本人 userId。
 注意：`read` 是 MySQL 保留字，SQL 中需用反引号。
 """
 
+import time
+
 from fastapi import APIRouter, Depends, Query
 
-from ..auth import require_auth
+from ..auth import require_auth, require_role
 from ..database import execute, row, rows
 from ..errors import BadRequestError, ForbiddenError, NotFoundError
+from ..schemas import NotifSendIn
 
 router = APIRouter()
+
+
+@router.post("")
+def send_notification(data: NotifSendIn, user=Depends(require_role("admin"))):
+    """管理员向指定用户发送通知（真实落库）。"""
+    target = row("SELECT id FROM users WHERE id = %s", [data.user_id])
+    if not target:
+        raise NotFoundError("目标用户不存在")
+    nid = f"n{int(time.time() * 1000)}{data.user_id}"
+    execute(
+        "INSERT INTO notifications (id, user_id, title, content, type, `read`) VALUES (%s,%s,%s,%s,%s,0)",
+        [nid, data.user_id, data.title, data.content, data.type or "system"],
+    )
+    return {"success": True, "data": {"id": nid}, "message": "通知已发送"}
 
 
 @router.get("")

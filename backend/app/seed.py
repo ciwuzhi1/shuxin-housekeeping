@@ -129,6 +129,44 @@ NOTIFICATIONS = [
     ("n7", "c2", "优惠活动通知", "夏季深度清洁8折优惠，限时7天", "promo", 1, "2025-07-20 10:00"),
 ]
 
+# 平台设置默认值（系统设置页真实读写）
+SETTINGS = [
+    ("platform_name", "舒心家政"),
+    ("service_phone", "400-888-8888"),
+    ("work_start", "08:00"),
+    ("work_end", "20:00"),
+    ("service_radius", "10"),
+    ("auto_dispatch", "true"),
+    ("commission_rate", "15"),
+    ("notify_new_order", "true"),
+    ("notify_income", "true"),
+    ("notify_review", "true"),
+]
+
+# 提现申请（与 transactions 中 withdraw 流水对应：w1 pending ← t7，w2 paid ← t6）
+WITHDRAWALS = [
+    ("w1", "p2", 1500, "王姨", "工商银行 ****5678", "pending", "2025-07-02 09:00", None),
+    ("w2", "p1", 2000, "刘姐", "建设银行 ****1234", "paid", "2025-07-01 10:00", "2025-07-03 14:00"),
+]
+# 注意：account_no 只存脱敏卡号，银行名由前端随 account_name 展示
+
+# 资质材料元数据（与后台审核弹窗的已上传状态对应；文件本体为演示占位）
+CERT_FILES = [
+    ("cf1", "p1", "idcard_front", "刘姐-身份证正面.jpg", "/uploads/seed/p1_idcard_front.jpg"),
+    ("cf2", "p1", "idcard_back", "刘姐-身份证反面.jpg", "/uploads/seed/p1_idcard_back.jpg"),
+    ("cf3", "p1", "health_cert", "刘姐-健康证明.jpg", "/uploads/seed/p1_health.jpg"),
+    ("cf4", "p2", "idcard_front", "王姨-身份证正面.jpg", "/uploads/seed/p2_idcard_front.jpg"),
+    ("cf5", "p2", "idcard_back", "王姨-身份证反面.jpg", "/uploads/seed/p2_idcard_back.jpg"),
+    ("cf6", "p2", "health_cert", "王姨-健康证明.jpg", "/uploads/seed/p2_health.jpg"),
+    ("cf7", "p3", "idcard_front", "小李-身份证正面.jpg", "/uploads/seed/p3_idcard_front.jpg"),
+    ("cf8", "p3", "idcard_back", "小李-身份证反面.jpg", "/uploads/seed/p3_idcard_back.jpg"),
+    ("cf9", "p3", "health_cert", "小李-健康证明.jpg", "/uploads/seed/p3_health.jpg"),
+    ("cf10", "p4", "idcard_front", "陈姐-身份证正面.jpg", "/uploads/seed/p4_idcard_front.jpg"),
+    ("cf11", "p4", "idcard_back", "陈姐-身份证反面.jpg", "/uploads/seed/p4_idcard_back.jpg"),
+    ("cf12", "p4", "health_cert", "陈姐-健康证明.jpg", "/uploads/seed/p4_health.jpg"),
+    ("cf13", "p4", "skill_cert", "陈姐-收纳协会认证.pdf", "/uploads/seed/p4_skill.pdf"),
+]
+
 
 def ensure_seed() -> None:
     """当 users 表为空时写入种子数据。"""
@@ -165,4 +203,17 @@ def ensure_seed() -> None:
         execute(
             "INSERT INTO notifications (id, user_id, title, content, type, `read`, created_at) VALUES (%s,%s,%s,%s,%s,%s,%s)",
             list(n),
+        )
+    for kv in SETTINGS:
+        execute("INSERT INTO settings (`key`, value) VALUES (%s, %s)", list(kv))
+    for w in WITHDRAWALS:
+        execute(
+            "INSERT INTO withdrawals (id, user_id, amount, account_name, account_no, status, created_at, processed_at) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+            list(w),
+        )
+    for cf in CERT_FILES:
+        execute(
+            "INSERT INTO certification_files (id, user_id, doc_type, filename, file_path) VALUES (%s,%s,%s,%s,%s)",
+            list(cf),
         )

@@ -18,11 +18,12 @@ from ..schemas import OrderCreate, OrderReviewIn, OrderStatusUpdate
 from ..state_machine import can_transition
 
 ORDER_SELECT = """
-SELECT id, order_no, client_id, provider_id, client_name, client_phone,
-       client_address, service_category, service_name, service_price,
-       total_hours, total_amount, status, payment_status, scheduled_date,
-       scheduled_time, deadline_time, special_requirements, rating, review,
-       review_images, provider_name, created_at, updated_at FROM orders
+SELECT o.id, o.order_no, o.client_id, o.provider_id, o.client_name, o.client_phone,
+       o.client_address, o.service_category, o.service_name, o.service_price,
+       o.total_hours, o.total_amount, o.status, o.payment_status, o.scheduled_date,
+       o.scheduled_time, o.deadline_time, o.special_requirements, o.rating, o.review,
+       o.review_images, o.provider_name, o.created_at, o.updated_at, up.phone AS provider_phone
+FROM orders o LEFT JOIN users up ON o.provider_id = up.id
 """
 
 
@@ -58,25 +59,25 @@ def list_orders(user: dict, page, size, clientId, providerId, status, search) ->
     conditions: list[str] = []
     params: list = []
     if clientId:
-        conditions.append("client_id = %s")
+        conditions.append("o.client_id = %s")
         params.append(clientId)
     if user["role"] == "provider":
         # 家政端：看到「指派给自己的订单」+「可抢的待接单（未分配）」
-        conditions.append("(provider_id = %s OR (status = 'pending' AND provider_id IS NULL))")
+        conditions.append("(o.provider_id = %s OR (o.status = 'pending' AND o.provider_id IS NULL))")
         params.append(user["userId"])
     elif providerId:
-        conditions.append("provider_id = %s")
+        conditions.append("o.provider_id = %s")
         params.append(providerId)
     if status:
-        conditions.append("status = %s")
+        conditions.append("o.status = %s")
         params.append(status)
     if search:
-        conditions.append("(order_no LIKE %s OR client_name LIKE %s OR service_name LIKE %s)")
+        conditions.append("(o.order_no LIKE %s OR o.client_name LIKE %s OR o.service_name LIKE %s)")
         params += [f"%{search}%", f"%{search}%", f"%{search}%"]
     where = (" WHERE " + " AND ".join(conditions)) if conditions else ""
 
     list_rows = rows(
-        f"{ORDER_SELECT}{where} ORDER BY created_at DESC LIMIT %s OFFSET %s",
+        f"{ORDER_SELECT}{where} ORDER BY o.created_at DESC LIMIT %s OFFSET %s",
         params + [pag["limit"], pag["offset"]],
     )
     total_row = row(f"SELECT COUNT(*) AS c FROM orders{where}", params)
@@ -104,7 +105,7 @@ def _assert_visible(order: dict, user: dict) -> None:
 
 
 def get_order(order_id: str, user: dict) -> dict:
-    order = row(f"{ORDER_SELECT} WHERE id = %s", [order_id])
+    order = row(f"{ORDER_SELECT} WHERE o.id = %s", [order_id])
     if not order:
         raise NotFoundError("订单不存在")
     _assert_visible(order, user)

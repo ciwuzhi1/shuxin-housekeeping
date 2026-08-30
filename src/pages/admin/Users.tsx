@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users as UsersIcon, Search, Phone, X } from 'lucide-react';
-import { adminApi } from '../../api';
+import { Users as UsersIcon, Search, Phone, X, Send } from 'lucide-react';
+import { adminApi, notificationApi } from '../../api';
 import { mockClients } from '../../mock/data';
 import { useApiData } from '../../hooks/useApiData';
 import type { Client } from '../../types';
@@ -10,6 +10,12 @@ export default function AdminUsers() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedUser, setSelectedUser] = useState<Client | null>(null);
   const [showModal, setShowModal] = useState(false);
+  // 发送通知表单状态（真实落库）
+  const [showSend, setShowSend] = useState(false);
+  const [notifTitle, setNotifTitle] = useState('');
+  const [notifContent, setNotifContent] = useState('');
+  const [sending, setSending] = useState(false);
+  const [sendResult, setSendResult] = useState('');
   const navigate = useNavigate();
 
   // 加载真实用户（客户角色）；后端不可用时降级 Mock
@@ -119,9 +125,58 @@ export default function AdminUsers() {
               <div className="flex justify-between"><span className="text-gray-500">用户名</span><span className="text-gray-900">{selectedUser.username}</span></div>
             </div>
             <div className="flex gap-3 mt-6">
-              <button onClick={() => { alert(`已向 ${selectedUser.name} 发送通知`); setShowModal(false); }} className="btn-primary flex-1">发送通知</button>
-              <button onClick={() => { setShowModal(false); navigate('/admin/orders'); }} className="btn-secondary flex-1">查看订单</button>
+              <button onClick={() => { setShowSend(true); setSendResult(''); }} className="btn-primary flex-1 flex items-center justify-center gap-1">
+                <Send className="w-4 h-4" /> 发送通知
+              </button>
+              <button onClick={() => { setShowModal(false); navigate('/admin/orders?search=' + encodeURIComponent(selectedUser.name)); }} className="btn-secondary flex-1">查看订单</button>
             </div>
+
+            {/* 发送通知表单（真实落库） */}
+            {showSend && (
+              <div className="mt-4 p-4 bg-blue-50 rounded-xl space-y-3">
+                <p className="text-sm font-medium text-gray-700">向 {selectedUser.name} 发送系统通知</p>
+                <input
+                  value={notifTitle}
+                  onChange={e => setNotifTitle(e.target.value)}
+                  placeholder="通知标题"
+                  className="input-field text-sm"
+                  maxLength={100}
+                />
+                <textarea
+                  value={notifContent}
+                  onChange={e => setNotifContent(e.target.value)}
+                  placeholder="通知内容"
+                  className="input-field text-sm h-20 resize-none"
+                  maxLength={500}
+                />
+                {sendResult && (
+                  <p className={'text-xs ' + (sendResult.startsWith('✅') ? 'text-green-600' : 'text-red-600')}>{sendResult}</p>
+                )}
+                <div className="flex gap-2 justify-end">
+                  <button onClick={() => setShowSend(false)} className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900">取消</button>
+                  <button
+                    disabled={sending || !notifTitle.trim() || !notifContent.trim()}
+                    onClick={async () => {
+                      setSending(true);
+                      setSendResult('');
+                      try {
+                        await notificationApi.send({ userId: selectedUser.id, title: notifTitle.trim(), content: notifContent.trim(), type: 'system' });
+                        setSendResult('✅ 通知已发送并写入对方消息中心');
+                        setNotifTitle('');
+                        setNotifContent('');
+                      } catch (e: any) {
+                        setSendResult('❌ 发送失败：' + (e?.message || '请重试'));
+                      } finally {
+                        setSending(false);
+                      }
+                    }}
+                    className="btn-primary text-sm disabled:opacity-50"
+                  >
+                    {sending ? '发送中...' : '确认发送'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

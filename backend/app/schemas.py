@@ -73,3 +73,30 @@ class OrderReviewIn(APIModel):
 # ======================== 通知 ========================
 class NotifReadAll(APIModel):
     user_id: Optional[str] = None
+
+
+class NotifSendIn(APIModel):
+    user_id: str = Field(min_length=1, max_length=32)
+    title: str = Field(min_length=1, max_length=100)
+    content: str = Field(min_length=1, max_length=500)
+    type: Optional[Literal["system", "order", "income", "promo", "review"]] = "system"
+
+
+# ======================== 提现 ========================
+class WithdrawCreateIn(APIModel):
+    amount: float = Field(gt=0)
+    account_name: str = Field(min_length=1, max_length=50)
+    account_no: str = Field(min_length=1, max_length=50)
+
+
+# ======================== 资质材料 ========================
+class CertUploadIn(APIModel):
+    doc_type: Literal["idcard_front", "idcard_back", "health_cert", "skill_cert"]
+    filename: str = Field(min_length=1, max_length=200)
+    data_base64: str = Field(min_length=1, max_length=8_000_000)  # 约 6MB 原始文件
+
+
+# ======================== 系统设置 ========================
+class PasswordChangeIn(APIModel):
+    old_password: str = Field(min_length=1, max_length=100)
+    new_password: str = Field(min_length=6, max_length=100)

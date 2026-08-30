@@ -107,6 +107,7 @@ export interface Order {
   createdAt: string;
   updatedAt: string;
   providerName?: string;
+  providerPhone?: string;
 }
 
 // ==================== 评价 ====================

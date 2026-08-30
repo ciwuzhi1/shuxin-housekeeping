@@ -5,6 +5,9 @@
 SET NAMES utf8mb4;
 
 DROP TABLE IF EXISTS notifications;
+DROP TABLE IF EXISTS withdrawals;
+DROP TABLE IF EXISTS certification_files;
+DROP TABLE IF EXISTS settings;
 DROP TABLE IF EXISTS transactions;
 DROP TABLE IF EXISTS reviews;
 DROP TABLE IF EXISTS orders;
@@ -139,6 +142,37 @@ CREATE TABLE coupons (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- 提现申请（pending → paid/rejected；打款时扣余额并写 withdraw 流水）
+CREATE TABLE withdrawals (
+  id VARCHAR(32) PRIMARY KEY,
+  user_id VARCHAR(32) NOT NULL,
+  amount DECIMAL(12,2) NOT NULL,
+  account_name VARCHAR(50),
+  account_no VARCHAR(50),
+  status VARCHAR(20) DEFAULT 'pending',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  processed_at DATETIME,
+  CONSTRAINT fk_wd_user FOREIGN KEY (user_id) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 资质认证材料（文件落盘 backend/uploads/，此处存元数据）
+CREATE TABLE certification_files (
+  id VARCHAR(32) PRIMARY KEY,
+  user_id VARCHAR(32) NOT NULL,
+  doc_type VARCHAR(30) NOT NULL,
+  filename VARCHAR(255),
+  file_path VARCHAR(255),
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_cert_user FOREIGN KEY (user_id) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 平台设置（key-value，管理员可改）
+CREATE TABLE settings (
+  `key` VARCHAR(50) PRIMARY KEY,
+  value VARCHAR(255),
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE INDEX idx_orders_client ON orders(client_id);
 CREATE INDEX idx_orders_provider ON orders(provider_id);
 CREATE INDEX idx_orders_status ON orders(status);
@@ -147,3 +181,5 @@ CREATE INDEX idx_reviews_provider ON reviews(provider_id);
 CREATE INDEX idx_notifications_user ON notifications(user_id);
 CREATE INDEX idx_subcategories_category ON service_subcategories(category_id);
 CREATE INDEX idx_transactions_order ON transactions(order_id);
+CREATE INDEX idx_wd_user ON withdrawals(user_id);
+CREATE INDEX idx_cert_user ON certification_files(user_id);

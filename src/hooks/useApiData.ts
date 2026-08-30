@@ -22,11 +22,13 @@ export function useApiData<T>(
   loading: boolean;
   apiMode: boolean;
   error: string | null;
+  reload: () => void;
 } {
   const [data, setData] = useState<T>(fallback);
   const [loading, setLoading] = useState(false);
   const [apiMode, setApiMode] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [refreshTick, setRefreshTick] = useState(0);
   const cancelledRef = useRef(false);
   const loadingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -74,7 +76,9 @@ export function useApiData<T>(
         clearTimeout(loadingTimerRef.current);
       }
     };
-  }, deps);
+  }, [...deps, refreshTick]);
 
-  return { data, loading, apiMode, error };
+  const reload = () => setRefreshTick(t => t + 1);
+
+  return { data, loading, apiMode, error, reload };
 }
