@@ -91,6 +91,7 @@ export default function Layout() {
   // ===== 通知中心：与订单/资金事件联动 =====
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [viewingNotif, setViewingNotif] = useState<Notification | null>(null);
   const notifRef = useRef<HTMLDivElement>(null);
 
   const loadNotifs = useCallback(async () => {
@@ -133,6 +134,15 @@ export default function Layout() {
       setNotifications(prev => prev.map(x => (x.id === n.id ? { ...x, read: true } : x)));
     } catch { /* 忽略 */ }
   };
+
+  // 查看消息详情：打开弹窗并自动标记已读
+  const handleViewNotif = (n: Notification) => {
+    setViewingNotif(n);
+    handleMarkRead(n);
+  };
+
+  // 时间显示：2026-08-30T14:53:20 → 2026-08-30 14:53
+  const fmtTime = (t: string) => (t || '').replace('T', ' ').slice(0, 16);
 
   const handleMarkAll = async () => {
     try {
@@ -271,7 +281,7 @@ export default function Layout() {
                       notifications.slice(0, 30).map(n => {
                         const { Icon, bg, color } = notifMeta(n.type);
                         return (
-                          <button key={n.id} onClick={() => handleMarkRead(n)}
+                          <button key={n.id} onClick={() => handleViewNotif(n)}
                             className={`w-full text-left px-4 py-3 border-b border-gray-50 hover:bg-gray-50 transition-colors flex gap-3 ${n.read ? 'opacity-60' : ''}`}>
                             <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${bg}`}>
                               <Icon className={`w-4 h-4 ${color}`} />
@@ -282,8 +292,9 @@ export default function Layout() {
                                 {!n.read && <span className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0" />}
                               </div>
                               <p className="text-xs text-gray-500 line-clamp-2 mt-0.5">{n.content}</p>
-                              <p className="text-[11px] text-gray-400 mt-1">{n.createdAt}</p>
+                              <p className="text-[11px] text-gray-400 mt-1">{fmtTime(n.createdAt)}</p>
                             </div>
+                            <span className="text-[11px] text-blue-500 self-center flex-shrink-0">查看</span>
                           </button>
                         );
                       })
@@ -305,6 +316,42 @@ export default function Layout() {
           </div>
         </main>
       </div>
+
+      {/* 消息详情弹窗：查看完整内容（打开即自动标记已读） */}
+      {viewingNotif && (() => {
+        const { Icon, bg, color } = notifMeta(viewingNotif.type);
+        const typeLabel: Record<string, string> = {
+          income: '收入通知', order: '订单通知', promo: '活动通知',
+          certification: '认证通知', system: '系统通知', review: '评价通知',
+        };
+        return (
+          <div className="modal-overlay" onClick={() => setViewingNotif(null)}>
+            <div className="modal-content" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-bold text-gray-900">消息详情</h2>
+                <button onClick={() => setViewingNotif(null)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+              </div>
+              <div className="flex items-center gap-3 mb-4">
+                <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${bg}`}>
+                  <Icon className={`w-5 h-5 ${color}`} />
+                </div>
+                <div>
+                  <p className="font-semibold text-gray-900">{viewingNotif.title}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {typeLabel[viewingNotif.type] || '通知'} · {fmtTime(viewingNotif.createdAt)}
+                  </p>
+                </div>
+              </div>
+              <div className="p-4 bg-gray-50 rounded-xl text-sm text-gray-700 leading-relaxed whitespace-pre-wrap break-words">
+                {viewingNotif.content}
+              </div>
+              <div className="flex justify-end mt-4">
+                <button onClick={() => setViewingNotif(null)} className="btn-secondary text-sm">关闭</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
