@@ -31,7 +31,7 @@ async def lifespan(_app: FastAPI):
     yield
 
 
-app = FastAPI(title="舒心家政 API", version="2.1.0", docs_url=None, redoc_url=None, lifespan=lifespan)
+app = FastAPI(title="舒心家政 API", version="4.3.0", docs_url=None, redoc_url=None, lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -109,7 +109,7 @@ def health():
         "success": True,
         "message": "舒心家政 API 服务运行正常",
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "version": "2.1.0",
+        "version": "4.3.0",
         "environment": "development",
         "database": {"type": "MySQL", "host": settings.DB_HOST},
         "stats": counts,

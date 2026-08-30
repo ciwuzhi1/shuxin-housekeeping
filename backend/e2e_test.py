@@ -493,7 +493,7 @@ def test_grab_pool_order_detail_visible(client):
     assert r.status_code == 200, f"抢单池订单详情应可看: {r.status_code} {r.text[:120]}"
 
 
-# ======================== G. v3.7 新能力回归（设置/通知/提现/资质/趋势/改密） ========================
+# ======================== G. v4.3 新能力回归（设置/通知/提现/资质/趋势/改密） ========================
 
 def test_admin_settings_roundtrip(client):
     """系统设置：admin 可读写；未知键被拒；client 403。"""

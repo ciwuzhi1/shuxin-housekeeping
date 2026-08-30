@@ -5,6 +5,7 @@ import { adminApi, orderApi } from '../../api';
 import { mockAdminStats, mockOrders } from '../../mock/data';
 import { getStatusText } from '../../mock/data';
 import { useApiData } from '../../hooks/useApiData';
+import { formatMoney } from '../../utils/format';
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -25,7 +26,7 @@ export default function AdminDashboard() {
     { icon: Users, label: '总用户数', value: (stats.totalUsers || 0).toLocaleString(), change: '+12.5%', up: true, bgColor: 'bg-blue-100', iconColor: 'text-blue-600', to: '/admin/users' },
     { icon: ShieldCheck, label: '家政人员', value: (stats.totalProviders || 0).toLocaleString(), change: '+8.2%', up: true, bgColor: 'bg-green-100', iconColor: 'text-green-600', to: '/admin/providers' },
     { icon: FileText, label: '总订单数', value: (stats.totalOrders || 0).toLocaleString(), change: '+15.3%', up: true, bgColor: 'bg-purple-100', iconColor: 'text-purple-600', to: '/admin/orders' },
-    { icon: CreditCard, label: '总收入', value: ('¥' + ((stats.totalRevenue || 0) / 10000).toFixed(1) + '万'), change: '+20.1%', up: true, bgColor: 'bg-orange-100', iconColor: 'text-orange-600', to: '/admin/finance' },
+    { icon: CreditCard, label: '总收入', value: formatMoney(stats.totalRevenue), change: '+20.1%', up: true, bgColor: 'bg-orange-100', iconColor: 'text-orange-600', to: '/admin/finance' },
   ];
 
   const recentOrderList = (recentOrders as any[]).slice(0, 5);

@@ -3,6 +3,7 @@ import { CreditCard, TrendingUp, DollarSign, ArrowUpRight, ArrowDownRight, Downl
 import { financeApi } from '../../api';
 import { mockFinancialSummary, mockTransactions } from '../../mock/data';
 import { useApiData } from '../../hooks/useApiData';
+import { formatMoney } from '../../utils/format';
 
 type Withdrawal = {
   id: string; userId: string; userName: string; amount: number;
@@ -35,10 +36,10 @@ export default function AdminFinance() {
   useEffect(() => { loadWithdrawals(); }, [loadWithdrawals]);
 
   const stats = [
-    { icon: DollarSign, label: '总收入', value: '¥' + ((finance.totalRevenue || 0) / 10000).toFixed(1) + '万', change: '+20.1%', up: true, bgColor: 'bg-blue-100', iconColor: 'text-blue-600' },
-    { icon: TrendingUp, label: '本月收入', value: '¥' + (finance.monthlyRevenue || 0).toLocaleString(), change: '+12.3%', up: true, bgColor: 'bg-green-100', iconColor: 'text-green-600' },
-    { icon: CreditCard, label: '待结算', value: '¥' + (finance.pendingPayout || 0).toLocaleString(), change: '-5.2%', up: false, bgColor: 'bg-orange-100', iconColor: 'text-orange-600' },
-    { icon: DollarSign, label: '平均客单价', value: '¥' + (finance.averageOrderValue || 0), change: '+3.1%', up: true, bgColor: 'bg-purple-100', iconColor: 'text-purple-600' },
+    { icon: DollarSign, label: '总收入', value: formatMoney(finance.totalRevenue), change: '+20.1%', up: true, bgColor: 'bg-blue-100', iconColor: 'text-blue-600' },
+    { icon: TrendingUp, label: '本月收入', value: formatMoney(finance.monthlyRevenue), change: '+12.3%', up: true, bgColor: 'bg-green-100', iconColor: 'text-green-600' },
+    { icon: CreditCard, label: '待结算', value: formatMoney(finance.pendingPayout), change: '-5.2%', up: false, bgColor: 'bg-orange-100', iconColor: 'text-orange-600' },
+    { icon: DollarSign, label: '平均客单价', value: formatMoney(finance.averageOrderValue), change: '+3.1%', up: true, bgColor: 'bg-purple-100', iconColor: 'text-purple-600' },
   ];
 
   const pendingWithdrawals = withdrawals.filter(r => r.status === 'pending');
@@ -133,8 +134,7 @@ export default function AdminFinance() {
           {(finance.revenueByMonth || []).map((d: any, i: number) => (
             <div key={i} className="flex-1 flex flex-col items-center gap-2">
               <div className="w-full flex flex-col items-center gap-0.5">
-                <span className="text-xs text-gray-500">¥{(d.revenue / 10000).toFixed(1)}万</span>
-                <div className="w-full bg-blue-100 rounded-t-lg relative" style={{ height: String(((d.revenue) / 134400) * 180) + 'px' }}>
+                <span className="text-xs text-gray-500">{formatMoney(d.revenue)}</span>                <div className="w-full bg-blue-100 rounded-t-lg relative" style={{ height: String(((d.revenue) / 134400) * 180) + 'px' }}>
                   <div className="absolute bottom-0 left-0 right-0 bg-blue-500 rounded-t-lg hover:bg-blue-600 transition-colors" style={{ height: '100%' }} />
                 </div>
               </div>
@@ -156,7 +156,7 @@ export default function AdminFinance() {
                   <div className="bg-blue-500 h-3 rounded-full transition-all" style={{ width: String(c.percentage) + '%' }} />
                 </div>
                 <span className="text-sm font-medium text-gray-700 w-12 text-right">{c.percentage}%</span>
-                <span className="text-xs text-gray-400 w-20 text-right">¥{((c.revenue || 0) / 10000).toFixed(1)}万</span>
+                <span className="text-xs text-gray-400 w-20 text-right">{formatMoney(c.revenue)}</span>
               </div>
             ))}
           </div>

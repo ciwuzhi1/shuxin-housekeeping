@@ -1,7 +1,7 @@
-"""增量迁移：v3.7 新增 settings / withdrawals / certification_files 三张表 + 种子。
+"""增量迁移：v4.3 新增 settings / withdrawals / certification_files 三张表 + 种子。
 
 用途：已有数据的老库就地升级（不删库）。新库直接执行 schema.sql 即可，无需本脚本。
-执行：cd 家政 && backend/.venv/Scripts/python.exe scripts/migrate_v37.py
+执行：cd 家政 && backend/.venv/Scripts/python.exe scripts/migrate_v43.py
 """
 
 import sys

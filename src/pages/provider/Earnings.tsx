@@ -5,6 +5,7 @@ import { Wallet, TrendingUp, ArrowUpRight, ArrowDownRight, CreditCard, DollarSig
 import { providerDataApi } from '../../api';
 import { mockTransactions } from '../../mock/data';
 import { useApiData } from '../../hooks/useApiData';
+import { formatMoney } from '../../utils/format';
 
 export default function ProviderEarnings() {
   const { user } = useAuth();
@@ -36,12 +37,12 @@ export default function ProviderEarnings() {
     .reduce((s: number, t: any) => s + Math.abs(Number(t.amount) || 0), 0);
 
   const stats = [
-    { icon: DollarSign, label: '总收入', value: '¥' + (earnings.totalEarnings || provider?.balance || 0), change: '+15%', up: true },
+    { icon: DollarSign, label: '总收入', value: formatMoney(earnings.totalEarnings || provider?.balance || 0), change: '+15%', up: true },
     // 修复：本月收入此前误显示总收入，改用后端 thisMonthEarnings
-    { icon: TrendingUp, label: '本月收入', value: '¥' + (earnings.thisMonthEarnings ?? 0), change: '+8%', up: true },
+    { icon: TrendingUp, label: '本月收入', value: formatMoney(earnings.thisMonthEarnings ?? 0), change: '+8%', up: true },
     // 修复：余额以接口实时值为准（登录快照可能过期）
-    { icon: CreditCard, label: '可提现余额', value: '¥' + (earnings.balance ?? provider?.balance ?? 0), change: '', up: true },
-    { icon: Clock, label: '已提现', value: '¥' + withdrawnTotal, change: '', up: false },
+    { icon: CreditCard, label: '可提现余额', value: formatMoney(earnings.balance ?? provider?.balance ?? 0), change: '', up: true },
+    { icon: Clock, label: '已提现', value: formatMoney(withdrawnTotal), change: '', up: false },
   ];
 
   const handleWithdraw = async () => {
