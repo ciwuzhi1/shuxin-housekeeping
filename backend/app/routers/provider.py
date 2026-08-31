@@ -10,9 +10,10 @@ import time
 from fastapi import APIRouter, Depends
 
 from ..auth import require_role
-from ..database import execute, row, rows, transaction
+from ..database import row, rows
 from ..errors import BadRequestError
 from ..schemas import WithdrawCreateIn
+from ..services import finance_service
 
 router = APIRouter()
 
@@ -139,32 +140,6 @@ def provider_stats(provider_id: str, user=Depends(require_role("provider"))):
 
 @router.post("/{provider_id}/withdrawals")
 def request_withdrawal(provider_id: str, data: WithdrawCreateIn, user=Depends(require_role("provider"))):
-    """提现申请：校验余额，写 pending 申请 + pending 流水，并通知管理员。"""
+    """提现申请（业务在 services/finance_service.py，FOR UPDATE 锁余额行）。"""
     _assert_self(provider_id, user)
-    bal = row("SELECT balance, name FROM users WHERE id = %s", [provider_id])
-    if not bal:
-        raise BadRequestError("用户不存在")
-    if float(bal["balance"]) < data.amount:
-        raise BadRequestError(f"余额不足（当前 ¥{bal['balance']}）")
-
-    def _do(conn):
-        wid = _new_id("w")
-        execute(
-            "INSERT INTO withdrawals (id, user_id, amount, account_name, account_no, status) VALUES (%s,%s,%s,%s,%s,'pending')",
-            [wid, provider_id, data.amount, data.account_name, data.account_no],
-            conn=conn,
-        )
-        execute(
-            "INSERT INTO transactions (id, order_id, order_no, type, amount, status, description) "
-            "VALUES (%s,NULL,NULL,'withdraw',%s,'pending',%s)",
-            [_new_id("t"), -data.amount, f"提现申请-{bal['name']}"],
-            conn=conn,
-        )
-        execute(
-            "INSERT INTO notifications (id, user_id, title, content, type, `read`) VALUES (%s,'a1',%s,%s,'system',0)",
-            [_new_id("n"), "提现申请待处理", f"{bal['name']} 申请提现 ¥{data.amount}，请及时处理"],
-            conn=conn,
-        )
-        return {"success": True, "data": {"id": wid}, "message": "提现申请已提交"}
-
-    return transaction(_do)
+    return finance_service.request_withdrawal(provider_id, data.amount, data.account_name, data.account_no)

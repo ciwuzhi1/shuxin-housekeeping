@@ -217,3 +217,10 @@ def ensure_seed() -> None:
             "INSERT INTO certification_files (id, user_id, doc_type, filename, file_path) VALUES (%s,%s,%s,%s,%s)",
             list(cf),
         )
+    # 提现流水与申请精确关联（与迁移 005 的存量回填同一规则）
+    execute(
+        "UPDATE transactions t JOIN withdrawals w "
+        "  ON ABS(t.amount) = w.amount AND t.type = 'withdraw' "
+        " AND t.status = IF(w.status = 'pending', 'pending', 'completed') "
+        "SET t.withdrawal_id = w.id WHERE t.withdrawal_id IS NULL"
+    )

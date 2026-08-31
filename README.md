@@ -170,7 +170,8 @@ curl http://localhost:3001/api/health
 | 认证期 | v2.0 | JWT 认证链路 + useApiData | 已被替代 |
 | 真实化期 | v3.0 → v3.6 | 迁移 FastAPI + MySQL、安全修复、通知/预约/财务联动、GitHub 开源准备 | 稳定基线 |
 | 架构期 | v4.0a / v4.2a | Argon2id、迁移机制、Service 层、财务幂等、CI 工程化 | 已合入 |
-| 功能完善期 | **v4.3（当前）** | 占位功能全部真实化（提现/通知/设置/资质上传/上下线/趋势）、两步式登录、排版与金额格式优化 | ✅ 最新 |
+| 一致性期 | v4.3b | 提现流水精确关联、行锁并发安全、外键完整性、连接池自愈 | ✅ 最新（功能同 v4.3） |
+| 功能完善期 | **v4.3 / v4.3b（当前）** | 占位功能全部真实化（提现/通知/设置/资质上传/上下线/趋势）、两步式登录、排版与金额格式优化 | ✅ 最新 |
 
 > 历史说明：曾短暂使用过 "v3.7" 指代当前批次，因其实际开发顺序在 v4.2a 之后，已统一更名为 **v4.3**，避免版本顺序歧义。
 
@@ -194,6 +195,7 @@ curl http://localhost:3001/api/health
 | **v4.0a** | **2026-08-30** | **V4.0 第一批优化（按 docs/测试与优化/ P0 清单）：① 密码安全升级 Argon2id（argon2-cffi），存量 SHA-256 哈希兼容校验、首次登录成功自动重哈希；② 财务幂等：transactions 加 (order_id,type) 唯一键、reviews 加 order_id 唯一键，评价更新加 rating=0 条件修复并发双写；③ 轻量迁移机制：migrations/ + scripts/migrate.py（schema_migrations 版本表，幂等），开发库已应用 002 索引/003 唯一键；④ Service 层第一步：订单业务迁入 services/order_service.py，orders 路由瘦身为 HTTP 编排（26 项基线 e2e 零变化通过）；⑤ 数据库复合索引（orders provider+status / client+status、transactions created_at）；⑥ 安全响应头 + [req] 访问日志中间件（不记录 token/密码/querystring）；⑦ 前端生产构建关闭 Mock 自动降级（useApiData/AuthContext/Booking 三处，开发行为不变）；⑧ 测试 26→59：新增单元测试（密码/JWT/状态机/分页）、旧哈希升级 e2e、财务幂等与安全头用例** |
 | **v4.2a** | **2026-08-30** | **工程化第一批：① GitHub Actions CI（.github/workflows/ci.yml）：后端 job（MySQL 8.0 服务容器 + ruff + pip-audit + pytest 覆盖率门禁 83%）与前端 job（npm ci + build + npm audit 观察模式），push/PR 触发；② 质量工具：ruff（规则集 E4/E7/E9/F/I，pyproject.toml 配置，存量 10 处违规清零）+ pytest-cov（当前 83.2%）+ pip-audit（零漏洞）固定进 requirements.txt；③ 顺手修复 order_no 3 位随机数在同日期多订单下碰撞唯一键导致的测试偶发失败（扩为 6 位）** |
 | **v4.3** | **2026-08-30** | **占位功能全部真实化（实地按钮测试后落地）：① 提现闭环——新增 withdrawals 表 + 家政员申请（余额校验）/管理员打款（事务：扣余额+withdraw 流水+通知）/驳回（流水作废+通知），前端财务页接真实数据、收入页新增申请提现；② 管理员发送通知（POST /api/notifications 落库，用户管理详情弹窗表单化）；③ 系统设置真实读写（settings 表 + GET/PUT /api/admin/settings，未知键拒绝；安全设置 tab 支持修改本人密码 PUT /api/auth/password）；④ 资质材料真实上传（certification_files 表 + base64 落盘 backend/uploads + /uploads 静态服务，提交后状态重置 pending 并通知管理员；审核弹窗展示真实材料并可查看文件）；⑤ 家政员工作台新增上下线开关（PUT /api/providers/{id}/status）；⑥ 收入趋势图真实聚合（week/month/year 三组按本人 income 流水），周/月/年切换生效；⑦ 审核通过/驳回自动通知家政员本人；⑧ 联系双方弹窗化（订单列表带家政员电话 providerPhone）；⑨ 修复刷新即登出（AuthContext 会话恢复期间缺 loading 守卫）；⑩ 订单"共 N 单"随筛选更新、"查看订单"按客户预过滤；⑪ 登录页改两步式（第一屏三端角色入口 → 第二屏对应端登录表单，可返回重选）；⑫ 后端/数据库完善：正式迁移 004_v43_platform_tables.sql（settings/withdrawals/certification_files 三表 + notifications(user_id,read)/withdrawals(status) 复合索引，存量库 migrate.py 一键升级）、finance.summary 分类收入与 admin.stats 服务分布聚合下推（消除 N+1）、家政员收入趋势 GROUP BY 下推；⑬ 通知中心查看消息详情弹窗（打开即已读）；⑭ 字体排版优化（中文字体栈/15px+1.65 行高/等宽数字）与金额智能格式化（formatMoney，¥0.2万→¥2,030）；新增 9 个 e2e 回归（68/68 通过，基线 e2e 26→35）** |
+| **v4.3b** | **2026-08-30** | **后端与数据库一致性强化：① 迁移 005——transactions 新增 withdrawal_id（提现流水与申请精确关联，替代按金额模糊匹配）+ 存量回填；orders.provider_id 补外键 fk_order_provider；② 提现打款/申请改用 SELECT … FOR UPDATE 行锁，杜绝并发绕过余额校验；③ Service 层第二步：提现业务抽入 services/finance_service.py（申请/打款/驳回），finance/provider 路由瘦身为鉴权+编排；④ 连接池开启 ping=1（MySQL wait_timeout 断连自愈）；⑤ schema.sql 双轨同步（withdrawal_id/新索引/外键），种子数据自动回填关联；新增 e2e 关联断言（69/69 通过）** |
 
 ---
 

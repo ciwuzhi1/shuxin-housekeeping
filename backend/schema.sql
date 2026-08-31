@@ -86,7 +86,8 @@ CREATE TABLE orders (
   provider_name VARCHAR(50),
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  CONSTRAINT fk_order_client FOREIGN KEY (client_id) REFERENCES users(id)
+  CONSTRAINT fk_order_client FOREIGN KEY (client_id) REFERENCES users(id),
+  CONSTRAINT fk_order_provider FOREIGN KEY (provider_id) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE reviews (
@@ -114,6 +115,7 @@ CREATE TABLE transactions (
   amount DECIMAL(12,2),
   status VARCHAR(20),
   description TEXT,
+  withdrawal_id VARCHAR(32),
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_tx_order FOREIGN KEY (order_id) REFERENCES orders(id),
   UNIQUE KEY uk_tx_order_type (order_id, type)
@@ -181,5 +183,8 @@ CREATE INDEX idx_reviews_provider ON reviews(provider_id);
 CREATE INDEX idx_notifications_user ON notifications(user_id);
 CREATE INDEX idx_subcategories_category ON service_subcategories(category_id);
 CREATE INDEX idx_transactions_order ON transactions(order_id);
+CREATE INDEX idx_tx_withdrawal ON transactions(withdrawal_id);
 CREATE INDEX idx_wd_user ON withdrawals(user_id);
 CREATE INDEX idx_cert_user ON certification_files(user_id);
+CREATE INDEX idx_notifications_user_read ON notifications(user_id, `read`);
+CREATE INDEX idx_withdrawals_status ON withdrawals(status);

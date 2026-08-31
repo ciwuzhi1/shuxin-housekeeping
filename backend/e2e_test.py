@@ -673,6 +673,30 @@ def test_change_password_flow(client):
     assert r.status_code == 200
 
 
+def test_withdrawal_transaction_linkage(client):
+    """v4.3b：提现流水通过 withdrawal_id 精确关联（不再按金额模糊匹配）。"""
+    import pymysql
+
+    p1 = login(client, "liujie", "provider")
+    admin = login(client, "admin", "admin", password="admin123")
+
+    r = client.post("/api/provider/p1/withdrawals", headers=auth(p1["token"]),
+                    json={"amount": 66, "accountName": "建设银行 ****1234", "accountNo": "6227"})
+    assert r.status_code == 200
+    wid = r.json()["data"]["id"]
+
+    r = client.post(f"/api/finance/withdrawals/{wid}/pay", headers=auth(admin["token"]))
+    assert r.status_code == 200
+
+    conn = pymysql.connect(host="127.0.0.1", port=3306, user="root", password="root", database=TEST_DB)
+    cur = conn.cursor()
+    cur.execute("SELECT status, withdrawal_id FROM transactions WHERE withdrawal_id = %s", [wid])
+    rows_ = cur.fetchall()
+    conn.close()
+    assert rows_, "打款流水应通过 withdrawal_id 关联"
+    assert all(r[1] == wid for r in rows_), "关联字段应等于申请 id"
+
+
 def test_order_list_includes_provider_phone(client):
     """订单列表/详情返回 providerPhone（联系双方功能数据来源）。"""
     admin = login(client, "admin", "admin", password="admin123")

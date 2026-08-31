@@ -35,6 +35,7 @@ def init_db() -> None:
             charset="utf8mb4",
             cursorclass=DictCursor,
             autocommit=True,
+            ping=1,  # 取连接时自动 ping，MySQL wait_timeout 断连后自愈重连
         )
 
 
