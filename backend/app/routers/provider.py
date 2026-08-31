@@ -27,27 +27,26 @@ def _new_id(prefix: str) -> str:
 
 
 def _income_trend(provider_id: str, days: int = 0, months: int = 0) -> list[dict]:
-    """按日(days)或按月(months)聚合本人 income 流水，补齐空档。"""
-    tx = rows(
-        "SELECT t.amount, t.created_at FROM transactions t JOIN orders o ON t.order_id = o.id "
-        "WHERE o.provider_id = %s AND t.type = 'income'",
-        [provider_id],
+    """按日(days)或按月(months)聚合本人 income 流水，补齐空档。
+
+    聚合在 SQL 完成（GROUP BY），Python 只负责补齐无收入的日期/月份空档。
+    """
+    grain = "%Y-%m-%d" if days else "%Y-%m"
+    grouped = rows(
+        "SELECT DATE_FORMAT(t.created_at, %s) AS dkey, SUM(t.amount) AS amount "
+        "FROM transactions t JOIN orders o ON t.order_id = o.id "
+        "WHERE o.provider_id = %s AND t.type = 'income' "
+        "GROUP BY dkey",
+        [grain, provider_id],
     )
-    by_key = {}
-    for t in tx:
-        dt = t["createdAt"]
-        if isinstance(dt, str):
-            dt = datetime.datetime.fromisoformat(dt.replace("Z", ""))
-        key = dt.strftime("%Y-%m-%d") if days else dt.strftime("%Y-%m")
-        by_key[key] = by_key.get(key, 0) + float(t["amount"] or 0)
+    by_key = {g["dkey"]: float(g["amount"] or 0) for g in grouped}
 
     out = []
     if days:
         today = datetime.date.today()
         for i in range(days - 1, -1, -1):
             d = today - datetime.timedelta(days=i)
-            label = d.strftime("%m-%d")
-            out.append({"label": label, "amount": round(by_key.get(d.isoformat(), 0), 2)})
+            out.append({"label": d.strftime("%m-%d"), "amount": round(by_key.get(d.isoformat(), 0), 2)})
     else:
         today = datetime.date.today().replace(day=1)
         for i in range(months - 1, -1, -1):

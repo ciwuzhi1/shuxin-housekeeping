@@ -70,11 +70,17 @@ def summary(_user=Depends(require_role("admin"))):
     pending_payout_withdrawals = sum(abs(float(o["amount"] or 0)) for o in pending_withdrawals)
     pending_payout = pending_payout_orders + pending_payout_withdrawals
 
-    # 分类收入
+    # 分类收入（一次 GROUP BY 聚合，消除按分类循环查询的 N+1）
+    rev_map = {
+        r["category"]: float(r["revenue"] or 0)
+        for r in rows(
+            "SELECT service_category AS category, SUM(total_amount) AS revenue "
+            "FROM orders WHERE status = 'completed' GROUP BY service_category"
+        )
+    }
     revenue_by_category = []
     for c in rows("SELECT name FROM service_categories"):
-        cat_orders = rows("SELECT total_amount FROM orders WHERE service_category = %s AND status = 'completed'", [c["name"]])
-        revenue = sum(float(o["totalAmount"] or 0) for o in cat_orders)
+        revenue = rev_map.get(c["name"], 0)
         revenue_by_category.append({
             "category": c["name"],
             "revenue": revenue,

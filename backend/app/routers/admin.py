@@ -37,10 +37,16 @@ def stats(_user=Depends(require_role("admin"))):
     refund_count = row("SELECT COUNT(*) AS c FROM orders WHERE payment_status = 'refunding'")
     pending_refunds = (refund_count or {}).get("c", 0)
 
-    # 服务分布
+    # 服务分布（一次 GROUP BY 聚合，替代按分类 Python 循环计数）
+    dist_map = {
+        r["category"]: r["count"]
+        for r in rows(
+            "SELECT service_category AS category, COUNT(*) AS count FROM orders GROUP BY service_category"
+        )
+    }
     service_distribution = []
     for c in rows("SELECT name FROM service_categories"):
-        count = sum(1 for o in all_orders if o["serviceCategory"] == c["name"])
+        count = dist_map.get(c["name"], 0)
         service_distribution.append({
             "name": c["name"],
             "count": count,
