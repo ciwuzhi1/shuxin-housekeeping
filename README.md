@@ -1,10 +1,8 @@
 # 舒心家政服务平台
 
-> 自然语言驱动的 Vibe Coding 项目实践 — 覆盖用户端、家政人员端、后台管理端的家政服务平台
+[![CI](https://github.com/ciwuzhi1/shuxin-housekeeping/actions/workflows/ci.yml/badge.svg)](https://github.com/ciwuzhi1/shuxin-housekeeping/actions/workflows/ci.yml)
 
-<!-- 推送到 GitHub 后取消注释并替换 <owner>/<repo> 即可显示 CI 徽章（Gitee 不运行 GitHub Actions）
-[![CI](https://github.com/<owner>/<repo>/actions/workflows/ci.yml/badge.svg)](https://github.com/<owner>/<repo>/actions/workflows/ci.yml)
--->
+> 自然语言驱动的 Vibe Coding 项目实践 — 覆盖用户端、家政人员端、后台管理端的家政服务平台
 
 ## 项目概览
 
