@@ -33,6 +33,11 @@ class Settings:
     # 限流（次/分钟）
     RATE_LIMIT_MAX: int = int(os.getenv("RATE_LIMIT_MAX", "200"))
 
+    # 登录防爆破（v4.5）：同 IP+用户名在 LOGIN_LOCK_SECONDS 窗口内
+    # 连续失败 LOGIN_MAX_FAILS 次即锁定
+    LOGIN_MAX_FAILS: int = int(os.getenv("LOGIN_MAX_FAILS", "5"))
+    LOGIN_LOCK_SECONDS: int = int(os.getenv("LOGIN_LOCK_SECONDS", "600"))
+
     # CORS
     CORS_ORIGIN: str = os.getenv("CORS_ORIGIN", "http://localhost:3000")
 

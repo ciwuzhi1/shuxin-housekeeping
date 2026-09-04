@@ -18,6 +18,7 @@ from ..auth import decode_token, require_auth, require_role
 from ..database import execute, parse_pagination, row, rows
 from ..errors import BadRequestError, ForbiddenError, NotFoundError
 from ..schemas import CertUploadIn, ProviderStatusIn
+from ..services import audit_service
 
 router = APIRouter()
 
@@ -102,8 +103,8 @@ def get_provider(provider_id: str, _user: dict | None = Depends(_optional_user))
     return {"success": True, "data": p}
 
 
-@router.put("/{provider_id}/verify", dependencies=[Depends(require_role("admin"))])
-def verify_provider(provider_id: str):
+@router.put("/{provider_id}/verify")
+def verify_provider(provider_id: str, _user=Depends(require_role("admin"))):
     p = row("SELECT id, name FROM users WHERE id = %s AND role = 'provider'", [provider_id])
     if not p:
         raise NotFoundError("服务人员不存在")
@@ -113,11 +114,12 @@ def verify_provider(provider_id: str):
         "INSERT INTO notifications (id, user_id, title, content, type, `read`) VALUES (%s,%s,%s,%s,'system',0)",
         [f"n{int(time.time() * 1000)}v{provider_id}", provider_id, "资质审核通过", f"{p['name']}您好，您的资质认证已通过审核"],
     )
+    audit_service.record(_user, "provider_verify", "user", provider_id, f"审核通过 {p['name']} 的资质认证")
     return {"success": True, "message": "认证已通过"}
 
 
-@router.put("/{provider_id}/reject", dependencies=[Depends(require_role("admin"))])
-def reject_provider(provider_id: str):
+@router.put("/{provider_id}/reject")
+def reject_provider(provider_id: str, _user=Depends(require_role("admin"))):
     p = row("SELECT id, name FROM users WHERE id = %s AND role = 'provider'", [provider_id])
     if not p:
         raise NotFoundError("服务人员不存在")
@@ -126,6 +128,7 @@ def reject_provider(provider_id: str):
         "INSERT INTO notifications (id, user_id, title, content, type, `read`) VALUES (%s,%s,%s,%s,'system',0)",
         [f"n{int(time.time() * 1000)}r{provider_id}", provider_id, "资质审核未通过", f"{p['name']}您好，您的资质认证未通过审核，请补充材料后重新提交"],
     )
+    audit_service.record(_user, "provider_reject", "user", provider_id, f"驳回 {p['name']} 的资质认证")
     return {"success": True, "message": "认证已驳回"}
 
 

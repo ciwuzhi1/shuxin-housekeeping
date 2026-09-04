@@ -130,12 +130,12 @@ def list_withdrawals(user=Depends(require_auth), userId: str = Query(None)):
 
 
 @router.post("/withdrawals/{withdrawal_id}/pay")
-def pay_withdrawal(withdrawal_id: str, _user=Depends(require_role("admin"))):
-    """打款（事务：FOR UPDATE 锁余额行 → 扣款 + 关联流水完成 + 通知本人）。"""
-    return finance_service.pay_withdrawal(withdrawal_id)
+def pay_withdrawal(withdrawal_id: str, user=Depends(require_role("admin"))):
+    """打款（事务：FOR UPDATE 锁余额行 → 扣款 + 关联流水完成 + 通知本人 + 审计留痕）。"""
+    return finance_service.pay_withdrawal(withdrawal_id, actor=user)
 
 
 @router.post("/withdrawals/{withdrawal_id}/reject")
-def reject_withdrawal(withdrawal_id: str, _user=Depends(require_role("admin"))):
-    """驳回：标记 rejected，关联 pending 流水作废 + 通知本人。"""
-    return finance_service.reject_withdrawal(withdrawal_id)
+def reject_withdrawal(withdrawal_id: str, user=Depends(require_role("admin"))):
+    """驳回：标记 rejected，关联 pending 流水作废 + 通知本人 + 审计留痕。"""
+    return finance_service.reject_withdrawal(withdrawal_id, actor=user)

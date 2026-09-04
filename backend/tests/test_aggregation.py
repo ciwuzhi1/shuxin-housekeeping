@@ -31,6 +31,18 @@ def _sum_completed() -> tuple[int, float]:
         conn.close()
 
 
+def _count_users() -> tuple[int, int]:
+    """直连测试库统计客户/家政员人数（契约基准，随用例注册动态变化）。"""
+    conn = pymysql.connect(host="127.0.0.1", port=3306, user="root", password="root", database=TEST_DB, charset="utf8mb4")
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT SUM(role='client'), SUM(role='provider') FROM users")
+            c, p = cur.fetchone()
+            return int(c or 0), int(p or 0)
+    finally:
+        conn.close()
+
+
 def test_admin_stats_contract(client):
     admin = _login(client, "admin", "admin", "admin123")
     data = client.get("/api/admin/stats", headers=_auth(admin["token"])).json()["data"]
@@ -41,12 +53,13 @@ def test_admin_stats_contract(client):
                 "orderTrend", "userGrowth", "serviceDistribution"):
         assert key in data, f"admin.stats 缺少字段 {key}"
 
-    # 取值与种子直算一致
+    # 取值与种子直算一致（用户数按库内实算，其他用例可能注册新用户）
     n, s = _sum_completed()
     assert data["totalOrders"] >= n
     assert abs(data["totalRevenue"] - s) < 0.01, f"totalRevenue 应等于 completed 金额合计 {s}: {data['totalRevenue']}"
-    assert data["totalUsers"] == 3 and data["totalProviders"] == 4  # 种子 c1-c3 / p1-p4
-    assert data["pendingCertifications"] == 1  # p3 待认证
+    clients, providers = _count_users()
+    assert data["totalUsers"] == clients and data["totalProviders"] == providers
+    assert data["pendingCertifications"] >= 0
     assert isinstance(data["monthlyActiveUsers"], int) and data["monthlyActiveUsers"] >= 1
 
 

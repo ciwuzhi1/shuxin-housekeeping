@@ -1,6 +1,7 @@
-"""后台管理路由：统计 / 用户列表 / 平台设置。
+"""后台管理路由：统计 / 用户列表 / 平台设置 / 账号封禁 / 审计日志。
 
 修复 P1-3：orderTrend / userGrowth / averageRating 由静态数据改为真实聚合。
+v4.5：封禁/解封（封禁即时生效并通知本人）+ 高危操作审计留痕与查询。
 """
 
 import time
@@ -9,7 +10,8 @@ from fastapi import APIRouter, Depends, Query
 
 from ..auth import require_role
 from ..database import execute, row, rows
-from ..errors import BadRequestError
+from ..errors import BadRequestError, ForbiddenError, NotFoundError
+from ..services import audit_service
 
 router = APIRouter()
 
@@ -129,4 +131,64 @@ def save_settings(data: dict, _user=Depends(require_role("admin"))):
     for k, v in data.items():
         execute("UPDATE settings SET value = %s WHERE `key` = %s", [str(v).lower() if isinstance(v, bool) else str(v), k])
     kv = rows("SELECT `key`, value FROM settings")
+    audit_service.record(_user, "settings_save", "settings", ",".join(data.keys()), f"保存 {len(data)} 项设置")
     return {"success": True, "data": {k["key"]: k["value"] for k in kv}, "message": "设置已保存"}
+
+
+# ======================== 账号封禁（v4.5） ========================
+
+
+def _notify(user_id: str, title: str, content: str) -> None:
+    execute(
+        "INSERT INTO notifications (id, user_id, title, content, type, `read`) VALUES (%s,%s,%s,%s,'system',0)",
+        [f"n{int(time.time() * 1000)}{user_id}", user_id, title, content],
+    )
+
+
+def _get_target_user(user_id: str) -> dict:
+    u = row("SELECT id, username, name, role, banned, status FROM users WHERE id = %s", [user_id])
+    if not u:
+        raise NotFoundError("用户不存在")
+    return u
+
+
+@router.put("/users/{user_id}/ban")
+def ban_user(user_id: str, _user=Depends(require_role("admin"))):
+    """封禁账号：无法登录、存量 token 立即失效；家政员同时强制下线。admin 账号不可封禁。"""
+    target = _get_target_user(user_id)
+    if target["role"] == "admin":
+        raise ForbiddenError("不能封禁管理员账号", "ADMIN_BAN_FORBIDDEN")
+    if target.get("banned"):
+        raise BadRequestError("该账号已被封禁", "ALREADY_BANNED")
+
+    execute("UPDATE users SET banned = 1 WHERE id = %s", [user_id])
+    if target["role"] == "provider" and target["status"] == "online":
+        execute("UPDATE users SET status = 'offline' WHERE id = %s", [user_id])
+    _notify(user_id, "账号已被封禁", f"{target['name']}您好，您的账号已被管理员封禁，如有疑问请联系平台客服")
+    audit_service.record(_user, "user_ban", "user", user_id, f"封禁账号 {target['username']}({target['name']})")
+    return {"success": True, "message": "账号已封禁"}
+
+
+@router.put("/users/{user_id}/unban")
+def unban_user(user_id: str, _user=Depends(require_role("admin"))):
+    """解封账号：恢复登录能力（家政员需自行重新上线）。"""
+    target = _get_target_user(user_id)
+    if not target.get("banned"):
+        raise BadRequestError("该账号未被封禁", "NOT_BANNED")
+
+    execute("UPDATE users SET banned = 0 WHERE id = %s", [user_id])
+    _notify(user_id, "账号已解封", f"{target['name']}您好，您的账号已解除封禁，欢迎继续使用平台服务")
+    audit_service.record(_user, "user_unban", "user", user_id, f"解封账号 {target['username']}({target['name']})")
+    return {"success": True, "message": "账号已解封"}
+
+
+@router.get("/audit-logs")
+def list_audit_logs(
+    _user=Depends(require_role("admin")),
+    page: int = Query(1),
+    size: int = Query(None),
+    action: str = Query(None),
+    actorId: str = Query(None),
+):
+    """审计日志查询（admin）：高危操作留痕，按时间倒序分页。"""
+    return audit_service.list_logs(page, size, action, actorId)

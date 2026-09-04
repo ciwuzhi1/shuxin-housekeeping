@@ -5,6 +5,7 @@
 SET NAMES utf8mb4;
 
 DROP TABLE IF EXISTS notifications;
+DROP TABLE IF EXISTS audit_logs;
 DROP TABLE IF EXISTS withdrawals;
 DROP TABLE IF EXISTS certification_files;
 DROP TABLE IF EXISTS settings;
@@ -40,6 +41,7 @@ CREATE TABLE users (
   total_orders INT DEFAULT 0,
   total_spent DECIMAL(12,2) DEFAULT 0,
   address VARCHAR(255),
+  banned TINYINT(1) NOT NULL DEFAULT 0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -175,6 +177,18 @@ CREATE TABLE settings (
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- 审计日志（v4.5，高危操作留痕：封禁/审核/提现/发通知/设置保存）
+CREATE TABLE audit_logs (
+  id VARCHAR(32) PRIMARY KEY,
+  actor_id VARCHAR(32) NOT NULL,
+  actor_name VARCHAR(50) DEFAULT '',
+  action VARCHAR(50) NOT NULL,
+  target_type VARCHAR(30) DEFAULT '',
+  target_id VARCHAR(32) DEFAULT '',
+  detail TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE INDEX idx_orders_client ON orders(client_id);
 CREATE INDEX idx_orders_provider ON orders(provider_id);
 CREATE INDEX idx_orders_status ON orders(status);
@@ -193,3 +207,7 @@ CREATE INDEX idx_wd_user ON withdrawals(user_id);
 CREATE INDEX idx_cert_user ON certification_files(user_id);
 CREATE INDEX idx_notifications_user_read ON notifications(user_id, `read`);
 CREATE INDEX idx_withdrawals_status ON withdrawals(status);
+-- 审计日志（迁移 006，与 migrations/006_v45_user_ban_audit.sql 同步维护）
+CREATE INDEX idx_audit_actor ON audit_logs(actor_id);
+CREATE INDEX idx_audit_action ON audit_logs(action);
+CREATE INDEX idx_audit_created ON audit_logs(created_at);

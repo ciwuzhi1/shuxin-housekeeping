@@ -12,6 +12,7 @@ from ..auth import require_auth, require_role
 from ..database import execute, row, rows
 from ..errors import BadRequestError, ForbiddenError, NotFoundError
 from ..schemas import NotifSendIn
+from ..services import audit_service
 
 router = APIRouter()
 
@@ -27,6 +28,7 @@ def send_notification(data: NotifSendIn, user=Depends(require_role("admin"))):
         "INSERT INTO notifications (id, user_id, title, content, type, `read`) VALUES (%s,%s,%s,%s,%s,0)",
         [nid, data.user_id, data.title, data.content, data.type or "system"],
     )
+    audit_service.record(user, "notification_send", "user", data.user_id, f"发送通知「{data.title}」")
     return {"success": True, "data": {"id": nid}, "message": "通知已发送"}
 
 

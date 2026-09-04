@@ -38,7 +38,7 @@
 | 认证 | JWT (PyJWT) + **Argon2id 密码哈希**（存量 SHA-256 哈希登录成功后自动升级） |
 | 校验 | Pydantic v2 |
 | 通信 | Vite Proxy /api → :3001；生产构建关闭 Mock 自动降级 |
-| 测试 | pytest 73 项（基线 e2e 36 + 单元测试 + 幂等/安全头/聚合契约用例），覆盖率 87.5%（门禁 86%） |
+| 测试 | pytest 81 项（基线 e2e 36 + 单元测试 + 幂等/安全头/聚合契约/平台管控用例），覆盖率 88.3%（门禁 86%） |
 
 > 2026-08-05 后端迁移完成：**Express + SQL.js → FastAPI + MySQL**。原 Node 后端 `server/` 已删除，前端 API 契约（`{success,data,message}` + camelCase + Bearer JWT）保持不变。
 
@@ -118,11 +118,12 @@ curl http://localhost:3001/api/health
 
 ---
 
-## ✅ 当前状态（2026-09-04 v4.4a 后）
+## ✅ 当前状态（2026-09-04 v4.5 后）
 
 | 状态 | 说明 |
 |------|------|
-| ✅ 可运行 | 前后端可正常启动，pytest 全量 73/73 通过（覆盖率 87.5%，门禁 86%） |
+| ✅ 可运行 | 前后端可正常启动，pytest 全量 81/81 通过（覆盖率 88.3%，门禁 86%） |
+| ✅ 平台管控 | v4.5：账号封禁/解封（登录 403、存量 token 即时失效、家政员强制下线、通知本人）、登录防爆破（5 次失败锁 10 分钟）、高危操作审计日志（audit_logs 表 + admin 查询接口） |
 | ✅ 聚合下推 | v4.4a：admin.stats / finance.summary / provider.earnings/stats / client.stats / health 改 SQL 条件聚合（DB→应用传输行数 O(n)→O(1)），EXPLAIN 实测见 `docs/测试与优化/V4.4_聚合下推EXPLAIN实测.md` |
 | ✅ 占位清零 | 提现（申请/打款/驳回）、管理员发送通知、系统设置保存、资质上传、上下线开关、收入趋势图、修改密码全部真实后端化 |
 | ✅ 密码校验 | 登录必须提交正确密码；Argon2id 哈希，存量 SHA-256 兼容并自动升级；支持本人修改密码 |
@@ -150,7 +151,7 @@ curl http://localhost:3001/api/health
 | `backend/.venv/Scripts/python.exe -m uvicorn backend.app.main:app --port 3001` | 后端（:3001） |
 | `backend/.venv/Scripts/python.exe -m pytest backend -v` | 全量测试（基线 e2e 36 项 + 单测/新增 37 项，独立测试库） |
 | `backend/.venv/Scripts/python.exe -m pytest backend/e2e_test.py -v` | 仅基线 e2e（36 项） |
-| `backend/.venv/Scripts/python.exe -m pytest backend -q --cov=backend/app --cov-fail-under=86` | 测试 + 覆盖率门禁（当前 87.5%） |
+| `backend/.venv/Scripts/python.exe -m pytest backend -q --cov=backend/app --cov-fail-under=86` | 测试 + 覆盖率门禁（当前 88.3%） |
 | `backend/.venv/Scripts/python.exe backend/scripts/migrate.py` | 数据库增量迁移（幂等，存量库升级） |
 | `backend/.venv/Scripts/python.exe -m ruff check backend` | 后端 lint（规则见 pyproject.toml） |
 | `backend/.venv/Scripts/python.exe -m pip_audit` | Python 依赖漏洞审计 |
@@ -171,7 +172,8 @@ curl http://localhost:3001/api/health
 | 架构期 | v4.0a / v4.2a | Argon2id、迁移机制、Service 层、财务幂等、CI 工程化 | 已合入 |
 | 一致性期 | v4.3b | 提现流水精确关联、行锁并发安全、外键完整性、连接池自愈 | 已合入 |
 | 功能完善期 | v4.3 | 占位功能全部真实化（提现/通知/设置/资质上传/上下线/趋势）、两步式登录、排版与金额格式优化 | 已合入 |
-| 后端深化期 | **v4.4a（当前）** | 聚合下推收尾（5 处 O(n)→O(1)）、schema.sql 双轨补齐、迁移幂等容忍、limit 上限、ENABLE_DOCS | ✅ 最新 |
+| 后端深化期 | v4.4a | 聚合下推收尾（5 处 O(n)→O(1)）、schema.sql 双轨补齐、迁移幂等容忍、limit 上限、ENABLE_DOCS | 已合入 |
+| 平台管控期 | **v4.5（当前）** | 账号封禁/解封 + 审计日志 + 登录防爆破 | ✅ 最新 |
 
 > 历史说明：曾短暂使用过 "v3.7" 指代当前批次，因其实际开发顺序在 v4.2a 之后，已统一更名为 **v4.3**，避免版本顺序歧义。
 
@@ -197,6 +199,7 @@ curl http://localhost:3001/api/health
 | **v4.3** | **2026-08-30** | **占位功能全部真实化（实地按钮测试后落地）：① 提现闭环——新增 withdrawals 表 + 家政员申请（余额校验）/管理员打款（事务：扣余额+withdraw 流水+通知）/驳回（流水作废+通知），前端财务页接真实数据、收入页新增申请提现；② 管理员发送通知（POST /api/notifications 落库，用户管理详情弹窗表单化）；③ 系统设置真实读写（settings 表 + GET/PUT /api/admin/settings，未知键拒绝；安全设置 tab 支持修改本人密码 PUT /api/auth/password）；④ 资质材料真实上传（certification_files 表 + base64 落盘 backend/uploads + /uploads 静态服务，提交后状态重置 pending 并通知管理员；审核弹窗展示真实材料并可查看文件）；⑤ 家政员工作台新增上下线开关（PUT /api/providers/{id}/status）；⑥ 收入趋势图真实聚合（week/month/year 三组按本人 income 流水），周/月/年切换生效；⑦ 审核通过/驳回自动通知家政员本人；⑧ 联系双方弹窗化（订单列表带家政员电话 providerPhone）；⑨ 修复刷新即登出（AuthContext 会话恢复期间缺 loading 守卫）；⑩ 订单"共 N 单"随筛选更新、"查看订单"按客户预过滤；⑪ 登录页改两步式（第一屏三端角色入口 → 第二屏对应端登录表单，可返回重选）；⑫ 后端/数据库完善：正式迁移 004_v43_platform_tables.sql（settings/withdrawals/certification_files 三表 + notifications(user_id,read)/withdrawals(status) 复合索引，存量库 migrate.py 一键升级）、finance.summary 分类收入与 admin.stats 服务分布聚合下推（消除 N+1）、家政员收入趋势 GROUP BY 下推；⑬ 通知中心查看消息详情弹窗（打开即已读）；⑭ 字体排版优化（中文字体栈/15px+1.65 行高/等宽数字）与金额智能格式化（formatMoney，¥0.2万→¥2,030）；新增 9 个 e2e 回归（68/68 通过，基线 e2e 26→35）** |
 | **v4.3b** | **2026-08-30** | **后端与数据库一致性强化：① 迁移 005——transactions 新增 withdrawal_id（提现流水与申请精确关联，替代按金额模糊匹配）+ 存量回填；orders.provider_id 补外键 fk_order_provider；② 提现打款/申请改用 SELECT … FOR UPDATE 行锁，杜绝并发绕过余额校验；③ Service 层第二步：提现业务抽入 services/finance_service.py（申请/打款/驳回），finance/provider 路由瘦身为鉴权+编排；④ 连接池开启 ping=1（MySQL wait_timeout 断连自愈）；⑤ schema.sql 双轨同步（withdrawal_id/新索引/外键），种子数据自动回填关联；新增 e2e 关联断言（69/69 通过）** |
 | **v4.4a** | **2026-09-04** | **后端深化（性能与一致性，零行为变化）：① 聚合下推收尾——admin.stats / finance.summary / provider.earnings / provider.stats / client.stats 的全表拉取+Python 统计改为 SQL 条件聚合单行返回，health 7 条 COUNT 合并为 1 条子查询（DB→应用传输行数 O(n)→O(1)，EXPLAIN 前后实测见 docs/测试与优化/V4.4_聚合下推EXPLAIN实测.md）；② 双轨修复——schema.sql 补齐迁移 002 的 3 个复合索引（全新部署此前会缺索引），migrate.py 对「对象已存在」类错误（1050/1060/1061/1826）幂等容忍，沙箱验证 schema.sql 重建→迁移全通过；③ e2e_test.py 测试库名遵循 HOUSEKEEPING_TEST_DB（修复与 conftest 并行隔离不一致的隐患）；④ 接口规范：reviews/transactions 的 limit 参数钳制到 MAX_PAGE_SIZE；新增 ENABLE_DOCS 环境变量（默认关闭）按需启用 /docs /openapi.json；⑤ 新增 4 项聚合契约 e2e，测试 69→73（覆盖率 87.5%，门禁 83%→86%）** |
+| **v4.5** | **2026-09-04** | **平台管控（功能增强）：① 账号封禁——迁移 006 新增 users.banned 与 audit_logs 表；PUT /api/admin/users/{id}/ban、/unban（admin 专属、admin 账号不可封禁、重复操作 400）；封禁即时生效：登录 403 ACCOUNT_BANNED、存量 token 经 require_auth 拦截全接口 401、在线家政员强制下线、自动通知本人；② 登录防爆破——同 IP+用户名 10 分钟窗口内连续失败 5 次（LOGIN_MAX_FAILS/LOGIN_LOCK_SECONDS 可配）锁定返回 429 LOGIN_LOCKED，成功登录清零；③ 审计日志——audit_service 统一留痕（封禁/解封/资质审核通过与驳回/提现打款与驳回/管理员发通知/设置保存，打款与驳回随业务事务同写），GET /api/admin/audit-logs 分页+action/actorId 过滤（admin 专属）；④ 新增 8 项 e2e（封禁闭环/审计/防爆破），测试 73→81（覆盖率 88.3%）** |
 
 ---
 
@@ -207,7 +210,7 @@ curl http://localhost:3001/api/health
 | 事项 | 状态 | 说明 |
 |------|------|------|
 | 页面占位提示 | v4.3 大幅清零 | 报表导出（CSV 下载）/提现/发送通知/系统设置/资质上传/上下线/收入趋势均已真实化；仅"地址管理/通知面板开发中"等个别提示保留 |
-| 禁用账号 | 有意保留 | 家政员管理页"禁用"仍为演示占位（后端无禁用状态），完整封禁需新增后端能力 |
+| 禁用账号 | 后端已就绪（v4.5） | 封禁/解封 API、登录与 token 拦截、强制下线、审计留痕均已完成；管理页"禁用"按钮接入新 API 属前端小改动，待下一批 |
 | 上传材料种子 | 演示元数据 | 种子数据中的资质文件仅为元数据记录（文件本体不存在），新上传的文件真实落盘 `backend/uploads/` |
 | `.claude/settings.local.json` | 已忽略 | 已加入 `.gitignore`，不会进入仓库 |
 | 密钥管理 | 已配置 | 环境变量经 `.env` 注入（见 `.env.example`），`.env` 不入仓库；生产须更换全部默认密钥 |

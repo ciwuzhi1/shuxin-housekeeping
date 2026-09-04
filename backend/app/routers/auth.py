@@ -2,16 +2,20 @@
 
 - 登录携带密码并校验（Argon2id，兼容旧版固定盐 SHA-256，见 app/auth.py）
 - 旧格式哈希用户登录成功后自动升级为 Argon2id（升级失败不阻断登录）
+- v4.5：同 IP+用户名连续登录失败达到阈值后临时锁定（防爆破，可配）；
+  被封禁账号登录返回 403 ACCOUNT_BANNED
 """
 
 import logging
 import time
+from collections import defaultdict
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
 from ..auth import hash_password, is_legacy_hash, require_auth, sign_token, verify_password
+from ..config import settings
 from ..database import execute, row
-from ..errors import BadRequestError, ConflictError, UnauthorizedError
+from ..errors import BadRequestError, ConflictError, ForbiddenError, TooManyRequestsError, UnauthorizedError
 from ..schemas import LoginIn, PasswordChangeIn, RegisterIn
 
 logger = logging.getLogger(__name__)
@@ -27,17 +31,48 @@ USER_FIELDS = {
 
 _ID_PREFIX = {"client": "c", "provider": "p", "admin": "a"}
 
+# 登录防爆破（v4.5）：key = "IP:用户名"，滚动窗口内连续失败达阈值即锁定
+_login_fails: dict[str, list[float]] = defaultdict(list)
+
+
+def _login_fail_key(request: Request, username: str) -> str:
+    return f"{request.client.host if request.client else 'unknown'}:{username}"
+
+
+def _assert_not_locked(request: Request, username: str) -> None:
+    now = time.time()
+    key = _login_fail_key(request, username)
+    recent = [t for t in _login_fails[key] if now - t < settings.LOGIN_LOCK_SECONDS]
+    _login_fails[key] = recent
+    if len(recent) >= settings.LOGIN_MAX_FAILS:
+        remain = int(settings.LOGIN_LOCK_SECONDS - (now - recent[0]))
+        raise TooManyRequestsError(f"登录失败次数过多，请 {max(remain, 1)} 秒后重试", "LOGIN_LOCKED")
+
+
+def _record_login_fail(request: Request, username: str) -> None:
+    _login_fails[_login_fail_key(request, username)].append(time.time())
+
 
 @router.post("/login")
-def login(data: LoginIn):
+def login(data: LoginIn, request: Request):
+    _assert_not_locked(request, data.username)
+
     user = row(f"SELECT {USER_FIELDS[data.role]} FROM users WHERE username = %s AND role = %s", [data.username, data.role])
     if not user:
+        _record_login_fail(request, data.username)
         raise UnauthorizedError("用户名或角色不正确", "INVALID_CREDENTIALS")
 
-    stored = row("SELECT password FROM users WHERE username = %s AND role = %s", [data.username, data.role])
+    stored = row("SELECT password, banned FROM users WHERE username = %s AND role = %s", [data.username, data.role])
     hashed = (stored or {}).get("password")
     if not hashed or not verify_password(data.password, hashed):
+        _record_login_fail(request, data.username)
         raise UnauthorizedError("密码错误", "INVALID_PASSWORD")
+
+    # v4.5：被封禁账号即使密码正确也拒绝登录（凭证有效但被禁止 → 403）
+    if (stored or {}).get("banned"):
+        raise ForbiddenError("账号已被封禁，请联系管理员", "ACCOUNT_BANNED")
+
+    _login_fails.pop(_login_fail_key(request, data.username), None)
 
     # 旧格式哈希（SHA-256+固定盐）登录成功后自动升级为 Argon2id；失败不阻断登录
     if is_legacy_hash(hashed):

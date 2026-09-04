@@ -18,6 +18,7 @@ from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from .config import settings
+from .database import row
 from .errors import ForbiddenError, UnauthorizedError
 
 _bearer = HTTPBearer(auto_error=False)
@@ -67,10 +68,15 @@ def decode_token(token: str) -> dict:
 
 
 def require_auth(credentials: HTTPAuthorizationCredentials | None = Depends(_bearer)) -> dict:
-    """必需登录：无 token 或 token 无效则 401。"""
+    """必需登录：无 token 或 token 无效则 401；账号被封禁则存量 token 立即失效。"""
     if credentials is None:
         raise UnauthorizedError("请先登录", "NO_TOKEN")
-    return decode_token(credentials.credentials)
+    payload = decode_token(credentials.credentials)
+    # v4.5：封禁即时生效——每个请求校验封禁标记（主键点查，代价可忽略）
+    user_row = row("SELECT banned FROM users WHERE id = %s", [payload.get("userId")])
+    if user_row and user_row.get("banned"):
+        raise UnauthorizedError("账号已被封禁，请联系管理员", "ACCOUNT_BANNED")
+    return payload
 
 
 def require_role(*roles: str):

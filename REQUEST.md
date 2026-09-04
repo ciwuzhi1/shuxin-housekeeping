@@ -11,7 +11,7 @@
 
 - **前端**:React 18 + TypeScript + Vite 5 + Tailwind CSS 3,React Router v6 角色路由守卫;生产构建关闭 Mock 自动降级
 - **后端**:FastAPI (Python 3.12) + MySQL 8.0,JWT 认证,Argon2id 密码哈希,角色 + 资源归属双重校验,订单状态机,财务流水(唯一键幂等),连接池,Service 分层,数据库迁移脚本,安全响应头
-- **测试**:pytest 73 项(基线 e2e 36 + 单元测试 + 幂等/安全头/聚合契约用例;独立测试库,覆盖率 87.5%);`npm run build` 0 错误
+- **测试**:pytest 81 项(基线 e2e 36 + 单元测试 + 幂等/安全头/聚合契约/平台管控用例;独立测试库,覆盖率 88.3%);`npm run build` 0 错误
 
 ### 三大角色
 

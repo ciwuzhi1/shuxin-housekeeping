@@ -43,6 +43,11 @@ class ConflictError(AppError):
         super().__init__(message, 409, code)
 
 
+class TooManyRequestsError(AppError):
+    def __init__(self, message: str = "请求过于频繁，请稍后再试", code: str = "TOO_MANY_REQUESTS"):
+        super().__init__(message, 429, code)
+
+
 class ValidationError(AppError):
     def __init__(self, errors: list | None = None, message: str = "数据验证失败"):
         super().__init__(message, 422, "VALIDATION_ERROR")

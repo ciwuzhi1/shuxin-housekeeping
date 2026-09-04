@@ -11,6 +11,7 @@ import time
 
 from ..database import execute, row, rows, transaction
 from ..errors import BadRequestError, NotFoundError
+from . import audit_service
 
 
 def _new_id(prefix: str) -> str:
@@ -63,7 +64,7 @@ def request_withdrawal(provider_id: str, amount: float, account_name: str, accou
     return transaction(_do)
 
 
-def pay_withdrawal(withdrawal_id: str) -> dict:
+def pay_withdrawal(withdrawal_id: str, actor: dict | None = None) -> dict:
     """打款（事务）：FOR UPDATE 锁余额行 → 校验 → 扣款 + 关联流水完成 + 通知本人。"""
     w = row("SELECT * FROM withdrawals WHERE id = %s", [withdrawal_id])
     if not w:
@@ -90,12 +91,15 @@ def pay_withdrawal(withdrawal_id: str) -> dict:
             [_new_id("n"), w["userId"], "提现到账", f"您的提现 ¥{w['amount']} 已打款至 {w['accountName']} {w['accountNo']}"],
             conn=conn,
         )
+        # 审计：与打款同事务写入，保证留痕与资金变动原子
+        audit_service.record(actor, "withdrawal_pay", "withdrawal", withdrawal_id,
+                             f"打款提现 ¥{w['amount']} 至 {w['accountName']} {w['accountNo']}", conn=conn)
         return {"success": True, "message": "打款成功"}
 
     return transaction(_do)
 
 
-def reject_withdrawal(withdrawal_id: str) -> dict:
+def reject_withdrawal(withdrawal_id: str, actor: dict | None = None) -> dict:
     """驳回：标记 rejected，关联 pending 流水作废，并通知本人。"""
     w = row("SELECT * FROM withdrawals WHERE id = %s", [withdrawal_id])
     if not w:
@@ -116,6 +120,8 @@ def reject_withdrawal(withdrawal_id: str) -> dict:
             [_new_id("n"), w["userId"], "提现申请被驳回", f"您的 ¥{w['amount']} 提现申请被驳回，资金保留在余额中"],
             conn=conn,
         )
+        audit_service.record(actor, "withdrawal_reject", "withdrawal", withdrawal_id,
+                             f"驳回提现申请 ¥{w['amount']}", conn=conn)
         return {"success": True, "message": "已驳回"}
 
     return transaction(_do)
