@@ -179,6 +179,11 @@ CREATE INDEX idx_orders_client ON orders(client_id);
 CREATE INDEX idx_orders_provider ON orders(provider_id);
 CREATE INDEX idx_orders_status ON orders(status);
 CREATE INDEX idx_orders_created ON orders(created_at);
+-- 复合索引（迁移 002，与 migrations/002_v4_security_indexes.sql 同步维护；
+-- migrate.py 对 1061 重复索引幂等，schema.sql 建过后迁移自动跳过）
+CREATE INDEX idx_orders_provider_status ON orders(provider_id, status);
+CREATE INDEX idx_orders_client_status ON orders(client_id, status);
+CREATE INDEX idx_transactions_created ON transactions(created_at);
 CREATE INDEX idx_reviews_provider ON reviews(provider_id);
 CREATE INDEX idx_notifications_user ON notifications(user_id);
 CREATE INDEX idx_subcategories_category ON service_subcategories(category_id);

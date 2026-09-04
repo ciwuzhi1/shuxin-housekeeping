@@ -42,8 +42,8 @@ jobs:
       - name: 依赖漏洞审计（pip-audit，环境扫描）
         run: pip-audit
 
-      - name: 测试（pytest，覆盖率门禁 83%）
-        run: pytest backend -q --cov=backend/app --cov-fail-under=83
+      - name: 测试（pytest，覆盖率门禁 86%）
+        run: pytest backend -q --cov=backend/app --cov-fail-under=86
 
   frontend:
     name: 前端构建

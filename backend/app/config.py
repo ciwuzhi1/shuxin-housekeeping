@@ -36,5 +36,8 @@ class Settings:
     # CORS
     CORS_ORIGIN: str = os.getenv("CORS_ORIGIN", "http://localhost:3000")
 
+    # 接口文档（/docs /redoc /openapi.json）：默认关闭，生产不建议开启
+    ENABLE_DOCS: bool = os.getenv("ENABLE_DOCS", "false").lower() in ("1", "true", "yes")
+
 
 settings = Settings()

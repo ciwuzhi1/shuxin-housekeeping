@@ -6,7 +6,7 @@
 from fastapi import APIRouter, Depends
 
 from ..auth import require_role
-from ..database import rows
+from ..database import row, rows
 from ..errors import ForbiddenError
 
 router = APIRouter()
@@ -31,13 +31,19 @@ def client_orders(client_id: str, user=Depends(require_role("client"))):
 @router.get("/{client_id}/stats")
 def client_stats(client_id: str, user=Depends(require_role("client"))):
     _assert_self(client_id, user)
-    all_rows = rows("SELECT status, total_amount FROM orders WHERE client_id = %s", [client_id])
-    completed = [o for o in all_rows if o["status"] == "completed"]
+    # V4.4a 聚合下推：全量拉取改单行条件聚合（别名 camelCase，row 返回前会 to_camel）
+    agg = row(
+        "SELECT COUNT(*) AS `totalOrders`, "
+        "COALESCE(SUM(status = 'completed'), 0) AS `completedOrders`, "
+        "COALESCE(SUM(CASE WHEN status = 'completed' THEN total_amount ELSE 0 END), 0) AS `totalSpent` "
+        "FROM orders WHERE client_id = %s",
+        [client_id],
+    )
     return {
         "success": True,
         "data": {
-            "totalOrders": len(all_rows),
-            "completedOrders": len(completed),
-            "totalSpent": sum(float(o["totalAmount"] or 0) for o in completed),
+            "totalOrders": int(agg["totalOrders"]),
+            "completedOrders": int(agg["completedOrders"]),
+            "totalSpent": float(agg["totalSpent"]),
         },
     }

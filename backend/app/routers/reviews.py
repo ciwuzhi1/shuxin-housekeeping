@@ -3,6 +3,7 @@
 from fastapi import APIRouter, Depends, Query
 
 from ..auth import require_auth
+from ..config import settings
 from ..database import rows
 
 router = APIRouter()
@@ -20,6 +21,7 @@ def list_reviews(providerId: str = Query(None), limit: int = Query(None), _user=
         params.append(providerId)
     sql += " ORDER BY created_at DESC"
     if limit:
+        # V4.4a：limit 上限保护，防止拉取全表
         sql += " LIMIT %s"
-        params.append(limit)
+        params.append(min(int(limit), settings.MAX_PAGE_SIZE))
     return {"success": True, "data": rows(sql, params)}

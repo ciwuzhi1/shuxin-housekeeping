@@ -79,7 +79,14 @@ def main() -> int:
                 for stmt in statements:
                     try:
                         cur.execute(stmt)
-                    except Exception:
+                    except pymysql.err.MySQLError as e:
+                        # 「对象已存在」类错误视为幂等成功（schema.sql 全量已建过同名对象）：
+                        # 1050 表存在 / 1060 列存在 / 1061 索引存在 / 1826 外键同名。
+                        # 1062（数据重复）等其余错误照常失败，避免掩盖真实冲突。
+                        code = e.args[0] if e.args else None
+                        if code in (1050, 1060, 1061, 1826):
+                            print(f"  exists({code}): {stmt.splitlines()[0][:72]}")
+                            continue
                         print(f"[error] {version} 执行失败，语句如下:\n  {stmt}\n")
                         raise
                     print(f"  ok: {stmt.splitlines()[0][:72]}")

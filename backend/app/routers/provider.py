@@ -74,11 +74,15 @@ def provider_orders(provider_id: str, user=Depends(require_role("provider"))):
 @router.get("/{provider_id}/earnings")
 def provider_earnings(provider_id: str, user=Depends(require_role("provider"))):
     _assert_self(provider_id, user)
-    completed = rows(
-        "SELECT total_amount, created_at FROM orders WHERE provider_id = %s AND status = 'completed' ORDER BY created_at ASC",
+    # V4.4a 聚合下推：本人 completed 订单改单行聚合；最近订单直接 DESC LIMIT 10
+    # （别名用 camelCase：database.row 返回前会做 to_camel 转换）
+    agg = row(
+        "SELECT COUNT(*) AS `completedOrders`, COALESCE(SUM(total_amount), 0) AS `totalEarnings` "
+        "FROM orders WHERE provider_id = %s AND status = 'completed'",
         [provider_id],
     )
-    total_earnings = sum(float(o["totalAmount"] or 0) for o in completed)
+    completed_orders = int(agg["completedOrders"])
+    total_earnings = float(agg["totalEarnings"])
     balance_row = row("SELECT balance FROM users WHERE id = %s", [provider_id])
     balance = float((balance_row or {}).get("balance") or 0) if balance_row else 0
 
@@ -100,16 +104,22 @@ def provider_earnings(provider_id: str, user=Depends(require_role("provider"))):
         [provider_id],
     )
 
+    # 最近订单：等价于原「completed 升序全量 → 末尾 10 条反转」
+    recent_orders = rows(
+        "SELECT total_amount, created_at FROM orders "
+        "WHERE provider_id = %s AND status = 'completed' ORDER BY created_at DESC LIMIT 10",
+        [provider_id],
+    )
+
     return {
         "success": True,
         "data": {
             "totalEarnings": total_earnings,
             "thisMonthEarnings": this_month_earnings,
-            "completedOrders": len(completed),
+            "completedOrders": completed_orders,
             "balance": balance,
-            "averageOrderValue": round(total_earnings / len(completed), 2) if completed else 0,
-            # 修复：最近订单应为最新在前（completed 升序，取末尾并反转）
-            "recentOrders": completed[-10:][::-1],
+            "averageOrderValue": round(total_earnings / completed_orders, 2) if completed_orders else 0,
+            "recentOrders": recent_orders,
             "transactions": transactions,
             # 真实趋势：周=近7天每日，月=近30天每日，年=近12月每月
             "trends": {
@@ -124,16 +134,23 @@ def provider_earnings(provider_id: str, user=Depends(require_role("provider"))):
 @router.get("/{provider_id}/stats")
 def provider_stats(provider_id: str, user=Depends(require_role("provider"))):
     _assert_self(provider_id, user)
-    orders = rows("SELECT status, total_amount FROM orders WHERE provider_id = %s", [provider_id])
-    completed = [o for o in orders if o["status"] == "completed"]
+    agg = row(
+        "SELECT COUNT(*) AS `totalOrders`, "
+        "COALESCE(SUM(status = 'completed'), 0) AS `completedOrders`, "
+        "COALESCE(SUM(status = 'pending'), 0) AS `pendingOrders`, "
+        "COALESCE(SUM(status = 'in_progress'), 0) AS `inProgressOrders`, "
+        "COALESCE(SUM(CASE WHEN status = 'completed' THEN total_amount ELSE 0 END), 0) AS `totalEarnings` "
+        "FROM orders WHERE provider_id = %s",
+        [provider_id],
+    )
     return {
         "success": True,
         "data": {
-            "totalOrders": len(orders),
-            "completedOrders": len(completed),
-            "pendingOrders": sum(1 for o in orders if o["status"] == "pending"),
-            "inProgressOrders": sum(1 for o in orders if o["status"] == "in_progress"),
-            "totalEarnings": sum(float(o["totalAmount"] or 0) for o in completed),
+            "totalOrders": int(agg["totalOrders"]),
+            "completedOrders": int(agg["completedOrders"]),
+            "pendingOrders": int(agg["pendingOrders"]),
+            "inProgressOrders": int(agg["inProgressOrders"]),
+            "totalEarnings": float(agg["totalEarnings"]),
         },
     }
 

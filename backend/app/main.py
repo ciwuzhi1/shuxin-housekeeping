@@ -31,7 +31,15 @@ async def lifespan(_app: FastAPI):
     yield
 
 
-app = FastAPI(title="舒心家政 API", version="4.3.0", docs_url=None, redoc_url=None, lifespan=lifespan)
+# 接口文档默认关闭（ENABLE_DOCS=true 时启用 /docs /redoc /openapi.json）
+app = FastAPI(
+    title="舒心家政 API",
+    version="4.4.0",
+    docs_url="/docs" if settings.ENABLE_DOCS else None,
+    redoc_url="/redoc" if settings.ENABLE_DOCS else None,
+    openapi_url="/openapi.json" if settings.ENABLE_DOCS else None,
+    lifespan=lifespan,
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -101,15 +109,20 @@ async def access_log(request: Request, call_next):
 
 @app.get("/api/health")
 def health():
-    counts = {}
-    for t in ["users", "orders", "service_categories", "service_subcategories", "reviews", "transactions", "notifications"]:
-        r = row(f"SELECT COUNT(*) AS c FROM {t}")
-        counts[t] = (r or {}).get("c", 0)
+    # V4.4a：7 条 COUNT 合并为 1 条子查询，一次往返
+    r = row(
+        "SELECT (SELECT COUNT(*) FROM users) AS users, (SELECT COUNT(*) FROM orders) AS orders, "
+        "(SELECT COUNT(*) FROM service_categories) AS service_categories, "
+        "(SELECT COUNT(*) FROM service_subcategories) AS service_subcategories, "
+        "(SELECT COUNT(*) FROM reviews) AS reviews, (SELECT COUNT(*) FROM transactions) AS transactions, "
+        "(SELECT COUNT(*) FROM notifications) AS notifications"
+    )
+    counts = {k: int(v) for k, v in (r or {}).items()}
     return {
         "success": True,
         "message": "舒心家政 API 服务运行正常",
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "version": "4.3.0",
+        "version": "4.4.0",
         "environment": "development",
         "database": {"type": "MySQL", "host": settings.DB_HOST},
         "stats": counts,

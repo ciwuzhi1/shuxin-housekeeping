@@ -16,22 +16,31 @@ router = APIRouter()
 
 @router.get("/stats")
 def stats(_user=Depends(require_role("admin"))):
-    all_orders = rows("SELECT status, total_amount, service_category, client_id, created_at FROM orders")
-    total_orders = len(all_orders)
-    completed = [o for o in all_orders if o["status"] == "completed"]
-    total_revenue = sum(float(o["totalAmount"] or 0) for o in completed)
-
-    providers = rows("SELECT id FROM users WHERE role = 'provider'")
-    pending_certs = rows("SELECT id FROM users WHERE certification_status = 'pending' AND role = 'provider'")
-    clients = rows("SELECT id FROM users WHERE role = 'client'")
+    # V4.4a 聚合下推：原先全表拉订单/用户到 Python 统计，改为条件聚合单行返回
+    # （别名用 camelCase：database.row 返回前会做 to_camel 转换）
+    order_agg = row(
+        "SELECT COUNT(*) AS `totalOrders`, "
+        "COALESCE(SUM(status = 'completed'), 0) AS `completedOrders`, "
+        "COALESCE(SUM(CASE WHEN status = 'completed' THEN total_amount ELSE 0 END), 0) AS `totalRevenue` "
+        "FROM orders"
+    )
+    total_orders = int(order_agg["totalOrders"])
+    total_revenue = float(order_agg["totalRevenue"])
 
     month_start = time.strftime("%Y-%m-01")
-    monthly_clients = rows("SELECT DISTINCT client_id FROM orders WHERE created_at >= %s", [month_start])
-    monthly_active_users = len(monthly_clients) or max(1, int(len(clients) * 0.3))
-
     today_str = time.strftime("%Y-%m-%d")
-    new_today = row("SELECT COUNT(*) AS c FROM users WHERE created_at >= %s", [today_str + " 00:00:00"])
-    new_users_today = (new_today or {}).get("c", 0)
+    user_agg = row(
+        "SELECT COALESCE(SUM(role = 'client'), 0) AS `totalUsers`, "
+        "COALESCE(SUM(role = 'provider'), 0) AS `totalProviders`, "
+        "COALESCE(SUM(role = 'provider' AND certification_status = 'pending'), 0) AS `pendingCerts`, "
+        "COALESCE(SUM(created_at >= %s), 0) AS `newUsersToday` "
+        "FROM users",
+        [today_str + " 00:00:00"],
+    )
+    total_users = int(user_agg["totalUsers"])
+
+    mau_row = row("SELECT COUNT(DISTINCT client_id) AS c FROM orders WHERE created_at >= %s", [month_start])
+    monthly_active_users = int((mau_row or {}).get("c", 0)) or max(1, int(total_users * 0.3))
 
     # 修复：orders.status 无 'refunding' 取值，退款待处理应按支付状态统计
     refund_count = row("SELECT COUNT(*) AS c FROM orders WHERE payment_status = 'refunding'")
@@ -67,14 +76,14 @@ def stats(_user=Depends(require_role("admin"))):
     return {
         "success": True,
         "data": {
-            "totalUsers": len(clients),
-            "totalProviders": len(providers),
+            "totalUsers": total_users,
+            "totalProviders": int(user_agg["totalProviders"]),
             "totalOrders": total_orders,
             "totalRevenue": total_revenue,
             "monthlyActiveUsers": monthly_active_users,
             "averageRating": round(float((avg_rating or {}).get("avg") or 0), 1),
-            "newUsersToday": new_users_today,
-            "pendingCertifications": len(pending_certs),
+            "newUsersToday": int(user_agg["newUsersToday"]),
+            "pendingCertifications": int(user_agg["pendingCerts"]),
             "pendingRefunds": pending_refunds,
             "orderTrend": [{"date": m["date"], "count": m["count"], "revenue": float(m["revenue"] or 0)} for m in order_trend],
             "userGrowth": [{"month": m["month"], "users": m["users"], "providers": m["providers"]} for m in user_growth],

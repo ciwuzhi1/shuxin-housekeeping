@@ -7,7 +7,8 @@
 from fastapi import APIRouter, Depends, Query
 
 from ..auth import require_auth, require_role
-from ..database import rows
+from ..config import settings
+from ..database import row, rows
 from ..errors import ForbiddenError
 from ..services import finance_service
 
@@ -49,21 +50,28 @@ def list_transactions(
         sql += " WHERE " + " AND ".join(conditions)
     sql += " ORDER BY t.created_at DESC"
     if limit:
+        # V4.4a：limit 上限保护，防止拉取全表
         sql += " LIMIT %s"
-        params.append(limit)
+        params.append(min(int(limit), settings.MAX_PAGE_SIZE))
     return {"success": True, "data": rows(sql, params)}
 
 
 @router.get("/summary")
 def summary(_user=Depends(require_role("admin"))):
-    completed = rows("SELECT total_amount, created_at FROM orders WHERE status = 'completed'")
-    total_revenue = sum(float(o["totalAmount"] or 0) for o in completed)
+    # V4.4a 聚合下推：completed 订单/待退款/待打款均改单行聚合，Python 只拼响应
+    # （别名用 camelCase：database.row 返回前会做 to_camel 转换）
+    completed_agg = row(
+        "SELECT COUNT(*) AS `completedOrders`, COALESCE(SUM(total_amount), 0) AS `totalRevenue` "
+        "FROM orders WHERE status = 'completed'"
+    )
+    total_revenue = float(completed_agg["totalRevenue"])
+    completed_orders = int(completed_agg["completedOrders"])
 
-    pending_refunds = rows("SELECT total_amount FROM orders WHERE payment_status = 'refunding'")
-    pending_payout_orders = sum(float(o["totalAmount"] or 0) for o in pending_refunds)
-    pending_withdrawals = rows("SELECT amount FROM transactions WHERE type = 'withdraw' AND status = 'pending'")
-    pending_payout_withdrawals = sum(abs(float(o["amount"] or 0)) for o in pending_withdrawals)
-    pending_payout = pending_payout_orders + pending_payout_withdrawals
+    pending_refund_row = row("SELECT COALESCE(SUM(total_amount), 0) AS s FROM orders WHERE payment_status = 'refunding'")
+    pending_withdrawal_row = row(
+        "SELECT COALESCE(SUM(ABS(amount)), 0) AS s FROM transactions WHERE type = 'withdraw' AND status = 'pending'"
+    )
+    pending_payout = float((pending_refund_row or {}).get("s", 0)) + float((pending_withdrawal_row or {}).get("s", 0))
 
     # 分类收入（一次 GROUP BY 聚合，消除按分类循环查询的 N+1）
     rev_map = {
@@ -97,8 +105,8 @@ def summary(_user=Depends(require_role("admin"))):
             "totalRevenue": total_revenue,
             "monthlyRevenue": float(revenue_by_month[-1]["revenue"]) if revenue_by_month else 0,
             "pendingPayout": pending_payout,
-            "completedOrders": len(completed),
-            "averageOrderValue": round(total_revenue / len(completed), 2) if completed else 0,
+            "completedOrders": completed_orders,
+            "averageOrderValue": round(total_revenue / completed_orders, 2) if completed_orders else 0,
             "commissionRate": 15,
             "revenueByMonth": revenue_by_month,
             "revenueByCategory": revenue_by_category,

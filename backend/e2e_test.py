@@ -16,7 +16,9 @@ import pathlib
 import sys
 
 # ========== 必须在导入应用模块之前设置环境变量 ==========
-TEST_DB = "housekeeping_test"
+# 库名遵循 HOUSEKEEPING_TEST_DB（与 backend/tests/conftest.py 一致，支持并行隔离），
+# 默认 housekeeping_test
+TEST_DB = os.environ.get("HOUSEKEEPING_TEST_DB", "housekeeping_test")
 os.environ["DB_NAME"] = TEST_DB
 os.environ["RATE_LIMIT_MAX"] = "100000"          # 关闭限流
 os.environ["JWT_SECRET"] = "e2e-test-secret-key-2026-must-be-long-enough"
