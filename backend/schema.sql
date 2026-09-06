@@ -6,6 +6,7 @@ SET NAMES utf8mb4;
 
 DROP TABLE IF EXISTS notifications;
 DROP TABLE IF EXISTS audit_logs;
+DROP TABLE IF EXISTS support_tickets;
 DROP TABLE IF EXISTS withdrawals;
 DROP TABLE IF EXISTS certification_files;
 DROP TABLE IF EXISTS settings;
@@ -189,6 +190,22 @@ CREATE TABLE audit_logs (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- 客服工单（v4.6，联系客服真实化：用户留言 + 管理员回复）
+CREATE TABLE support_tickets (
+  id VARCHAR(32) PRIMARY KEY,
+  user_id VARCHAR(32) NOT NULL,
+  order_no VARCHAR(32) DEFAULT '',
+  category VARCHAR(20) DEFAULT 'consult',
+  content TEXT NOT NULL,
+  contact_phone VARCHAR(20) DEFAULT '',
+  status VARCHAR(20) DEFAULT 'open',
+  reply TEXT,
+  replied_by VARCHAR(32) DEFAULT '',
+  replied_at DATETIME,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_st_user FOREIGN KEY (user_id) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE INDEX idx_orders_client ON orders(client_id);
 CREATE INDEX idx_orders_provider ON orders(provider_id);
 CREATE INDEX idx_orders_status ON orders(status);
@@ -211,3 +228,6 @@ CREATE INDEX idx_withdrawals_status ON withdrawals(status);
 CREATE INDEX idx_audit_actor ON audit_logs(actor_id);
 CREATE INDEX idx_audit_action ON audit_logs(action);
 CREATE INDEX idx_audit_created ON audit_logs(created_at);
+-- 客服工单（迁移 007，与 migrations/007_v46_support_tickets.sql 同步维护）
+CREATE INDEX idx_st_user ON support_tickets(user_id);
+CREATE INDEX idx_st_status ON support_tickets(status);

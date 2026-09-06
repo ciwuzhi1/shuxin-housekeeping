@@ -4,12 +4,14 @@
 提现业务逻辑在 services/finance_service.py（Service 层第二步），路由只做鉴权与编排。
 """
 
+import time
+
 from fastapi import APIRouter, Depends, Query
 
 from ..auth import require_auth, require_role
 from ..config import settings
 from ..database import row, rows
-from ..errors import ForbiddenError
+from ..errors import BadRequestError, ForbiddenError
 from ..services import finance_service
 
 router = APIRouter()
@@ -57,7 +59,10 @@ def list_transactions(
 
 
 @router.get("/summary")
-def summary(_user=Depends(require_role("admin"))):
+def summary(_user=Depends(require_role("admin")), range: str = Query("month")):
+    # V4.6：range 支持 week(近8周)/month(近12月)/year(近4年) 趋势粒度，月度收入恒为自然月
+    if range not in ("week", "month", "year"):
+        raise BadRequestError("range 仅支持 week/month/year")
     # V4.4a 聚合下推：completed 订单/待退款/待打款均改单行聚合，Python 只拼响应
     # （别名用 camelCase：database.row 返回前会做 to_camel 转换）
     completed_agg = row(
@@ -90,28 +95,77 @@ def summary(_user=Depends(require_role("admin"))):
             "percentage": round(revenue / total_revenue * 100, 1) if total_revenue else 0,
         })
 
-    # 月度趋势（真实聚合）
-    month_rows = rows(
-        "SELECT DATE_FORMAT(created_at, '%Y-%m') AS month, COUNT(*) AS cnt, SUM(total_amount) AS rev "
-        "FROM orders WHERE status = 'completed' GROUP BY month ORDER BY month"
+    # 趋势（V4.6：week=近8周 / month=近12月 / year=近4年，SQL 聚合 + Python 补零空档）
+    revenue_by_month = _revenue_trend(range)
+
+    # 月度收入恒为自然月（不随趋势粒度变化）
+    cur = time.strftime("%Y-%m")
+    monthly_row = row(
+        "SELECT COALESCE(SUM(total_amount), 0) AS s FROM orders "
+        "WHERE status = 'completed' AND DATE_FORMAT(created_at, '%%Y-%%m') = %s",
+        [cur],
     )
-    revenue_by_month = [
-        {"month": m["month"], "revenue": float(m["rev"] or 0), "orders": m["cnt"]} for m in month_rows
-    ]
 
     return {
         "success": True,
         "data": {
             "totalRevenue": total_revenue,
-            "monthlyRevenue": float(revenue_by_month[-1]["revenue"]) if revenue_by_month else 0,
+            "monthlyRevenue": float((monthly_row or {}).get("s", 0)),
             "pendingPayout": pending_payout,
             "completedOrders": completed_orders,
             "averageOrderValue": round(total_revenue / completed_orders, 2) if completed_orders else 0,
             "commissionRate": 15,
+            "range": range,
             "revenueByMonth": revenue_by_month,
             "revenueByCategory": revenue_by_category,
         },
     }
+
+
+def _revenue_trend(range: str) -> list[dict]:
+    """按粒度生成趋势桶：SQL 按 dkey 聚合一次，Python 补齐零收入空档。
+
+    - week：近 8 周（桶 = 周一日期）
+    - month：近 12 个月（桶 = YYYY-MM）
+    - year：近 4 年（桶 = YYYY）
+    """
+    import datetime
+
+    today = datetime.date.today()
+    if range == "week":
+        monday = today - datetime.timedelta(days=today.weekday())
+        starts = [monday - datetime.timedelta(weeks=i) for i in range(7, -1, -1)]
+        keys = [d.isoformat() for d in starts]
+        labels = [f"{d.month}/{d.day}" for d in starts]
+        grain, start = "%Y-%m-%d", keys[0]
+    elif range == "year":
+        keys = [str(today.year - i) for i in range(3, -1, -1)]
+        labels = keys
+        grain, start = "%Y", f"{keys[0]}-01-01"
+    else:
+        keys, y, m = [], today.year, today.month
+        for i in range(11, -1, -1):
+            mm, yy = m - i, y
+            while mm <= 0:
+                mm, yy = mm + 12, yy - 1
+            keys.append(f"{yy:04d}-{mm:02d}")
+        labels = keys
+        grain, start = "%Y-%m", f"{keys[0]}-01"
+
+    grouped = rows(
+        "SELECT DATE_FORMAT(created_at, %s) AS dkey, COUNT(*) AS cnt, COALESCE(SUM(total_amount), 0) AS rev "
+        "FROM orders WHERE status = 'completed' AND created_at >= %s GROUP BY dkey",
+        [grain, start],
+    )
+    by_key = {g["dkey"]: g for g in grouped}
+    return [
+        {
+            "label": label,
+            "revenue": float((by_key.get(k) or {}).get("rev") or 0),
+            "orders": int((by_key.get(k) or {}).get("cnt") or 0),
+        }
+        for k, label in zip(keys, labels)
+    ]
 
 
 # ======================== 提现管理（业务在 services/finance_service.py） ========================

@@ -9,8 +9,9 @@ import time
 from fastapi import APIRouter, Depends, Query
 
 from ..auth import require_role
-from ..database import execute, row, rows
+from ..database import execute, parse_pagination, row, rows
 from ..errors import BadRequestError, ForbiddenError, NotFoundError
+from ..schemas import SupportReplyIn
 from ..services import audit_service
 
 router = APIRouter()
@@ -192,3 +193,57 @@ def list_audit_logs(
 ):
     """审计日志查询（admin）：高危操作留痕，按时间倒序分页。"""
     return audit_service.list_logs(page, size, action, actorId)
+
+
+# ======================== 客服工单（v4.6） ========================
+
+
+@router.get("/support-tickets")
+def list_support_tickets(
+    _user=Depends(require_role("admin")),
+    status: str = Query(None),
+    page: int = Query(1),
+    size: int = Query(None),
+):
+    """客服工单列表（admin）：按状态筛选，时间倒序分页，联用户姓名。"""
+    pag = parse_pagination(page, size)
+    conditions: list[str] = []
+    params: list = []
+    if status:
+        conditions.append("t.status = %s")
+        params.append(status)
+    where = (" WHERE " + " AND ".join(conditions)) if conditions else ""
+    data = rows(
+        "SELECT t.id, t.user_id, u.name AS user_name, u.phone AS user_phone, t.order_no, t.category, "
+        "t.content, t.contact_phone, t.status, t.reply, t.replied_by, t.replied_at, t.created_at "
+        f"FROM support_tickets t JOIN users u ON t.user_id = u.id{where} "
+        "ORDER BY t.created_at DESC LIMIT %s OFFSET %s",
+        params + [pag["limit"], pag["offset"]],
+    )
+    total = (row(f"SELECT COUNT(*) AS c FROM support_tickets t{where}", params) or {}).get("c", 0)
+    return {
+        "success": True,
+        "data": data,
+        "pagination": {"page": pag["page"], "size": pag["size"], "total": total,
+                       "totalPages": (total + pag["size"] - 1) // pag["size"]},
+    }
+
+
+@router.put("/support-tickets/{ticket_id}/reply")
+def reply_support_ticket(ticket_id: str, data: SupportReplyIn, user=Depends(require_role("admin"))):
+    """回复工单：状态置 replied，站内通知用户，审计留痕。"""
+    t = row("SELECT id, user_id, status FROM support_tickets WHERE id = %s", [ticket_id])
+    if not t:
+        raise NotFoundError("工单不存在")
+    if t["status"] == "closed":
+        raise BadRequestError("该工单已关闭")
+    execute(
+        "UPDATE support_tickets SET status = 'replied', reply = %s, replied_by = %s, replied_at = NOW() WHERE id = %s",
+        [data.reply, user["userId"], ticket_id],
+    )
+    execute(
+        "INSERT INTO notifications (id, user_id, title, content, type, `read`) VALUES (%s,%s,%s,%s,'system',0)",
+        [f"n{int(time.time() * 1000)}{t['user_id']}", t["user_id"], "客服工单已回复", "您的客服工单已收到回复，请前往「联系客服」查看"],
+    )
+    audit_service.record(user, "support_reply", "support_ticket", ticket_id, f"回复客服工单：{data.reply[:50]}")
+    return {"success": True, "message": "回复已发送"}

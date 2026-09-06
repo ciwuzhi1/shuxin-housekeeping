@@ -100,3 +100,15 @@ class CertUploadIn(APIModel):
 class PasswordChangeIn(APIModel):
     old_password: str = Field(min_length=1, max_length=100)
     new_password: str = Field(min_length=6, max_length=100)
+
+
+# ======================== 客服工单（v4.6） ========================
+class SupportTicketIn(APIModel):
+    content: str = Field(min_length=5, max_length=500)
+    order_no: str = Field(default="", max_length=32)
+    category: Literal["consult", "complaint", "refund", "other"] = "consult"
+    contact_phone: str = Field(default="", max_length=20)
+
+
+class SupportReplyIn(APIModel):
+    reply: str = Field(min_length=1, max_length=1000)

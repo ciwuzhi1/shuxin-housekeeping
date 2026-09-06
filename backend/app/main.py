@@ -18,7 +18,19 @@ from fastapi.staticfiles import StaticFiles
 from .config import settings
 from .database import init_db, row
 from .errors import register_exception_handlers
-from .routers import admin, auth, categories, client, finance, notifications, orders, provider, providers, reviews
+from .routers import (
+    admin,
+    auth,
+    categories,
+    client,
+    finance,
+    notifications,
+    orders,
+    provider,
+    providers,
+    reviews,
+    support,
+)
 from .seed import ensure_seed
 
 _start = time.time()
@@ -135,6 +147,7 @@ app.include_router(categories.router, prefix="/api/categories", tags=["categorie
 app.include_router(providers.router, prefix="/api/providers", tags=["providers"])
 app.include_router(orders.router, prefix="/api/orders", tags=["orders"])
 app.include_router(reviews.router, prefix="/api/reviews", tags=["reviews"])
+app.include_router(support.router, prefix="/api/support", tags=["support"])
 app.include_router(notifications.router, prefix="/api/notifications", tags=["notifications"])
 app.include_router(finance.router, prefix="/api/finance", tags=["finance"])
 app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
